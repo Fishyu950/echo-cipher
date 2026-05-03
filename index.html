@@ -733,14 +733,17 @@ input, button, .poppins,
 .toast.success { background:#4a7c59; }
 .toast.error { background:#b85a5a; }
 .sync-hint {
-  display:flex; align-items:center; gap:8px;
-  background:var(--primary-bg); border-bottom:1px solid #f0d090;
+  display:flex; align-items:center; gap:10px;
+  background:#FFF9E6; border-radius:var(--radius-lg);
+  border:1px solid #f0d090;
   color:var(--primary-dark); font-family:'Poppins','Noto Sans TC',sans-serif;
-  font-size:13px; font-weight:500; padding:9px 20px;
+  font-size:13px; font-weight:500;
+  padding:14px 16px; margin:12px 20px 0;
   cursor:pointer; user-select:none;
+  box-shadow:0 2px 8px rgba(245,166,35,0.10);
 }
 .sync-hint.hidden { display:none; }
-.sync-hint .mi { font-size:16px; color:var(--primary); }
+.sync-hint .mi { font-size:20px; color:var(--primary); }
 .sync-hint-text { flex:1; }
 @keyframes spin { to { transform:rotate(360deg); } }
 </style>
@@ -761,7 +764,13 @@ input, button, .poppins,
   <div id="introDot"></div>
   <!-- s3-s5: logo -->
   <div id="introLock">
-    <img src="icon.svg" class="lock-logo" alt="Echo">
+    <svg class="lock-logo" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+      <defs><clipPath id="roundClip"><circle cx="256" cy="256" r="256"/></clipPath></defs>
+      <g clip-path="url(#roundClip)">
+        <rect x="0" y="0" fill="#E59A2D" width="512" height="512"/>
+        <path fill="#FFFFFF" d="M346.34,212.71h-0.61v-21.3c0-48.01-38.92-86.93-86.93-86.93h-5.59c-48.01,0-86.93,38.92-86.93,86.93v21.3h-0.61c-12.19,0-22.08,9.88-22.08,22.08v150.65c0,12.19,9.88,22.08,22.08,22.08h180.67c12.19,0,22.08-9.88,22.08-22.08V234.79C368.41,222.59,358.53,212.71,346.34,212.71z M218.52,156.73c9.26-9.27,21.58-14.37,34.68-14.37h5.59c13.1,0,25.42,5.1,34.68,14.37c9.26,9.26,14.37,21.58,14.37,34.68v21.3H204.16v-21.3C204.16,178.31,209.26,166,218.52,156.73z M268.22,327.33v31.65c0,6.75-5.47,12.22-12.22,12.22s-12.22-5.47-12.22-12.22v-31.65c-5.39-3.83-8.9-10.11-8.9-17.22c0-11.67,9.46-21.12,21.12-21.12c11.66,0,21.12,9.46,21.12,21.12C277.12,317.22,273.6,323.51,268.22,327.33z"/>
+      </g>
+    </svg>
   </div>
   <!-- s3-s4: surrounding icons -->
   <div class="intro-si" id="iSi1"><span class="mi">mail</span></div>
@@ -893,7 +902,7 @@ input, button, .poppins,
     <div class="avatar-btn" id="userAvatar" onclick="showProfile()">U</div>
   </div>
   <div id="syncHint" class="sync-hint hidden" onclick="manualSync()">
-    <span class="mi">cloud_off</span>
+    <span class="mi">sync</span>
     <span class="sync-hint-text">點此重新連線 Google 以同步資料</span>
     <span class="mi" style="font-size:14px;opacity:0.5">chevron_right</span>
   </div>
@@ -1052,7 +1061,7 @@ input, button, .poppins,
         <div class="profile-row-arrow"><span class="mi">chevron_right</span></div>
       </div>
     </div>
-    <div class="profile-version">Echo v1.0.0 build 20260504</div>
+    <div class="profile-version">Echo v1.0.1 build 20260504</div>
   </div>
   <div class="bottom-nav">
     <div class="nav-item" id="navHome2" onclick="switchNav('home')">
