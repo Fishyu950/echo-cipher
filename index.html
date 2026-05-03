@@ -1279,11 +1279,12 @@ function initGoogleAuth(){
 function requestToken(promptVal=''){
   return new Promise((resolve, reject)=>{
     if(!googleTokenClient){ reject(new Error('GSI not ready')); return; }
+    const isSilent = (promptVal === '' || promptVal === 'none');
     let escalated = false;
     const handler = (resp)=>{
       if(resp.error){ reject(new Error(resp.error)); return; }
-      // If drive.file scope is missing (existing user before scope change), force re-consent once
-      if(resp.scope && !resp.scope.includes('drive.file') && !escalated){
+      // Only escalate to consent screen for interactive (non-silent) requests
+      if(!isSilent && resp.scope && !resp.scope.includes('drive.file') && !escalated){
         escalated = true;
         googleTokenClient.callback = handler;
         googleTokenClient.requestAccessToken({ prompt: 'consent' });
@@ -1558,6 +1559,7 @@ async function createSpreadsheet(token){
   console.log('[Echo] createSpreadsheet: default sheet id =', firstSheetId);
 
   // Step 3: Rename default sheet to EchoData, add 設定 sheet
+  console.log('[Echo] createSpreadsheet: renaming Sheet1 →', SHEET_NAME, 'and adding', SETTINGS_SHEET);
   const batchResp = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -1567,8 +1569,13 @@ async function createSpreadsheet(token){
     ]})
   });
   console.log('[Echo] createSpreadsheet: batchUpdate HTTP', batchResp.status);
+  const batchData = await batchResp.json();
+  console.log('[Echo] createSpreadsheet: batchUpdate response =', JSON.stringify(batchData, null, 2));
+  if(!batchResp.ok) throw new Error('batchUpdate:' + batchResp.status + ' ' + JSON.stringify(batchData.error));
 
+  // Step 4: Save ID to localStorage, then write column headers
   localStorage.setItem(SHEET_ID_KEY + currentUser, spreadsheetId);
+  console.log('[Echo] createSpreadsheet: writing headers to', SHEET_NAME, '— cols:', SHEET_COLS);
   await writeSheet(spreadsheetId, token, [SHEET_COLS]);
   console.log('[Echo] createSpreadsheet: SUCCESS — id =', spreadsheetId);
   return spreadsheetId;
@@ -1763,10 +1770,13 @@ async function doSync(){
   console.log('[Echo] doSync: sheetId =', sheetId, '| isNew =', isNew);
 
   if(isNew){
-    // Sheet was just created (user may have deleted it) — push local data up, don't pull empty sheet
-    console.log('[Echo] doSync: new sheet — uploading local data (local → Sheets)');
-    await saveToSheets(currentUser, entries);
-    console.log('[Echo] doSync: uploaded', entries.length, 'entries to new sheet');
+    // Sheet was just created — push local data directly (skip ensureSheet round-trip inside saveToSheets)
+    console.log('[Echo] doSync: new sheet — uploading', entries.length, 'entries (local → Sheets)');
+    const uploadRows = [SHEET_COLS, ...entries.map(e=>[
+      e.platform, e.account, e.hint||'', e.note||'', e.category||'其他', e.createdAt
+    ])];
+    await writeSheet(sheetId, token, uploadRows);
+    console.log('[Echo] doSync: upload complete');
     await saveNickToSheets(getNick());
   } else {
     // Existing sheet — Sheets is source of truth
