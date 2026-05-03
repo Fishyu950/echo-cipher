@@ -5,7 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Echo</title>
 <link rel="icon" type="image/svg+xml" href="icon.svg">
-<link rel="apple-touch-icon" href="icon.svg">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Echo">
 <meta name="mobile-web-app-capable" content="yes">
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
@@ -514,6 +517,7 @@ input, button, .poppins,
 /* Profile screen */
 #profileScreen { background: var(--bg); }
 .profile-body { padding: 24px 20px 100px; }
+.profile-version { text-align:center; font-size:11px; color:var(--ink4); padding:16px 0 4px; font-family:'Poppins',sans-serif; letter-spacing:0.04em; }
 .profile-card {
   background: var(--white); border-radius: var(--radius-lg);
   padding: 20px; margin-bottom: 14px; box-shadow: var(--shadow-sm);
@@ -1048,6 +1052,7 @@ input, button, .poppins,
         <div class="profile-row-arrow"><span class="mi">chevron_right</span></div>
       </div>
     </div>
+    <div class="profile-version">Echo v1.0.0 build 20260504</div>
   </div>
   <div class="bottom-nav">
     <div class="nav-item" id="navHome2" onclick="switchNav('home')">
@@ -1309,39 +1314,78 @@ function getTokenIfValid(){
   return (accessToken && Date.now() < tokenExpiry) ? accessToken : null;
 }
 
+// Shared post-auth PIN routing (used by both popup and redirect flows)
+function proceedToPinAfterAuth(email, token){
+  if(token) ensureSheet(token).then(({sheetId}) => console.log('[Echo] sheet ready:', sheetId)).catch(e => console.warn('[Echo] sheet init error:', e));
+  pendingUser = email;
+  ['setPinUserName','confirmPinUserName','enterPinUserName'].forEach(id=>{
+    const el = document.getElementById(id); if(el) el.textContent = email;
+  });
+  const storedPin = localStorage.getItem(PIN_KEY + email);
+  if(storedPin && !forgotPinMode){
+    buildKeypad('enterPinKeypad', enterPinPress);
+    showScreen('enterPinScreen');
+  } else {
+    localStorage.removeItem(PIN_KEY + email);
+    forgotPinMode = false;
+    currentPin=''; setPinFirst='';
+    updateDots('setPinDots', 0);
+    document.getElementById('setPinErr').textContent='';
+    buildKeypad('setPinKeypad', setPinPress);
+    showScreen('setPinScreen');
+  }
+}
+
+// Handle OAuth redirect callback — used in iOS Safari PWA standalone mode
+async function handleOAuthRedirect(){
+  const hash = window.location.hash.slice(1);
+  if(!hash.includes('access_token')) return false;
+  const params = new URLSearchParams(hash);
+  const tok = params.get('access_token');
+  const expiresIn = parseInt(params.get('expires_in') || '3599', 10);
+  if(!tok) return false;
+  history.replaceState(null, '', window.location.pathname);
+  accessToken = tok;
+  tokenExpiry = Date.now() + (expiresIn - 60) * 1000;
+  try {
+    const infoResp = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers: { Authorization: 'Bearer ' + tok } });
+    const info = await infoResp.json();
+    if(!info.email) return false;
+    if(info.picture) localStorage.setItem(AVATAR_KEY + info.email, info.picture);
+    proceedToPinAfterAuth(info.email, tok);
+    return true;
+  } catch(e){
+    console.error('[Echo] OAuth redirect error:', e);
+    showToast('Google 登入失敗', 'error');
+    return false;
+  }
+}
+
 async function googleLogin(){
   if(GOOGLE_CLIENT_ID === 'YOUR_CLIENT_ID_HERE'){
     alert('尚未設定 Google Client ID\n\n請參閱說明，在 Google Cloud Console 建立 OAuth 用戶端並填入 GOOGLE_CLIENT_ID');
     return;
   }
+  // iOS Safari PWA standalone mode — popups are blocked, use redirect flow instead
+  if(window.navigator.standalone){
+    const scope = 'https://www.googleapis.com/auth/drive.file email profile';
+    const redirectUri = window.location.origin + window.location.pathname;
+    window.location.href = 'https://accounts.google.com/o/oauth2/v2/auth'
+      + '?client_id=' + encodeURIComponent(GOOGLE_CLIENT_ID)
+      + '&redirect_uri=' + encodeURIComponent(redirectUri)
+      + '&response_type=token'
+      + '&scope=' + encodeURIComponent(scope)
+      + '&prompt=select_account';
+    return;
+  }
   if(!googleTokenClient){ showToast('Google 登入初始化中，請稍後', 'error'); return; }
   try {
     const token = await requestToken('select_account');
-    const resp = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-      headers: { Authorization: `Bearer ${token}` }
-    });
+    const resp = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers: { Authorization: `Bearer ${token}` } });
     const info = await resp.json();
     if(!info.email) throw new Error('no email');
-    const email = info.email;
-    if(info.picture) localStorage.setItem(AVATAR_KEY + email, info.picture);
-    ensureSheet(token).then(id => console.log('[Echo] googleLogin: sheet ready:', id)).catch(e => console.warn('[Echo] googleLogin: sheet init error:', e));
-    pendingUser = email;
-    ['setPinUserName','confirmPinUserName','enterPinUserName'].forEach(id=>{
-      document.getElementById(id).textContent = email;
-    });
-    const storedPin = localStorage.getItem(PIN_KEY + email);
-    if(storedPin && !forgotPinMode){
-      buildKeypad('enterPinKeypad', enterPinPress);
-      showScreen('enterPinScreen');
-    } else {
-      localStorage.removeItem(PIN_KEY + email);
-      forgotPinMode = false;
-      currentPin=''; setPinFirst='';
-      updateDots('setPinDots', 0);
-      document.getElementById('setPinErr').textContent='';
-      buildKeypad('setPinKeypad', setPinPress);
-      showScreen('setPinScreen');
-    }
+    if(info.picture) localStorage.setItem(AVATAR_KEY + info.email, info.picture);
+    proceedToPinAfterAuth(info.email, token);
   } catch(e){
     showToast('Google 登入失敗，請再試一次', 'error');
   }
@@ -1614,8 +1658,8 @@ function parseSheetRows(allRows){
     });
 }
 
-async function loadFromSheets(email){
-  const token = await ensureToken();
+async function loadFromSheets(email, providedToken = null){
+  const token = providedToken || await ensureToken();
   let sheetId = localStorage.getItem(SHEET_ID_KEY + email);
 
   // Helper to fetch rows from a known sheet ID
@@ -1644,8 +1688,8 @@ async function loadFromSheets(email){
   return rows === 'not_found' ? null : parseSheetRows(rows);
 }
 
-async function saveToSheets(email, data){
-  const token = await ensureToken();
+async function saveToSheets(email, data, providedToken = null){
+  const token = providedToken || await ensureToken();
   const { sheetId } = await ensureSheet(token);
   const rows = [SHEET_COLS, ...data.map(e=>[
     e.platform, e.account, e.hint||'', e.note||'', e.category||'其他', e.createdAt
@@ -1726,7 +1770,7 @@ async function syncToSheetsBackground(){
   const token = getTokenIfValid();
   if(!token || !currentUser) return;
   try {
-    await saveToSheets(currentUser, entries);
+    await saveToSheets(currentUser, entries, token);
     showToast('已同步至 Google Sheets', 'success');
     document.getElementById('profileMeta').textContent = '已連結 Google Sheets';
   } catch(e){ /* silent */ }
@@ -1736,15 +1780,14 @@ async function syncFromSheetsBackground(){
   const token = getTokenIfValid();
   if(!token || !currentUser) return;
   try {
-    // Pull entries — but protect local data if Sheets is empty and local has records
-    const sheetEntries = await loadFromSheets(currentUser);
+    // Pass pre-validated token — never call ensureToken() or requestToken() from background path
+    const sheetEntries = await loadFromSheets(currentUser, token);
     if(sheetEntries !== null && sheetEntries.length > 0){
       entries = sheetEntries;
       saveUserData(currentUser, entries);
       renderList();
     } else if(sheetEntries !== null && sheetEntries.length === 0 && entries.length > 0){
-      // Sheets is empty but local has data — upload local data to protect it
-      await saveToSheets(currentUser, entries);
+      await saveToSheets(currentUser, entries, token);
     }
     // Pull nickname from 設定 sheet
     const sheetId = localStorage.getItem(SHEET_ID_KEY + currentUser);
@@ -2019,14 +2062,8 @@ function loginSuccess(user){
     showSyncHint(false);
     syncFromSheetsBackground();
   } else {
-    // Try silent token refresh — no popup if user has active Google session in browser
-    requestToken('').then(() => {
-      showSyncHint(false);
-      syncFromSheetsBackground();
-    }).catch(() => {
-      // Silent auth failed — show tappable hint, let user decide
-      showSyncHint(true);
-    });
+    // No cached token — show hint so user can tap to re-connect without any auto-popup
+    showSyncHint(true);
   }
 }
 
@@ -2158,11 +2195,23 @@ function runIntroAnimation(){
   initGoogleAuth();
   initCatScrollDrag();
   initScrollTop();
+
+  // iOS PWA standalone: handle OAuth redirect token in URL hash
+  if(window.location.hash.includes('access_token')){
+    handleOAuthRedirect().then(ok => {
+      if(!ok){
+        // Redirect parsing failed — fall through to normal startup
+        const savedUser = localStorage.getItem(USER_KEY);
+        if(savedUser){ showWelcomeForReturningUser(savedUser); setTimeout(()=>{ pendingUser=savedUser; document.getElementById('enterPinUserName').textContent=savedUser; buildKeypad('enterPinKeypad',enterPinPress); showScreen('enterPinScreen'); },1000); }
+        else { runIntroAnimation(); }
+      }
+    });
+    return;
+  }
+
   const savedUser = localStorage.getItem(USER_KEY);
   if(savedUser){
-    // Show welcome screen in final state with "已連結 Google" indicator
     showWelcomeForReturningUser(savedUser);
-    // Navigate to PIN after brief display so user sees they're returning
     setTimeout(() => {
       pendingUser = savedUser;
       document.getElementById('enterPinUserName').textContent = savedUser;
