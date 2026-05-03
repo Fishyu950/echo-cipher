@@ -728,6 +728,16 @@ input, button, .poppins,
 .toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
 .toast.success { background:#4a7c59; }
 .toast.error { background:#b85a5a; }
+.sync-hint {
+  display:flex; align-items:center; gap:8px;
+  background:var(--primary-bg); border-bottom:1px solid #f0d090;
+  color:var(--primary-dark); font-family:'Poppins','Noto Sans TC',sans-serif;
+  font-size:13px; font-weight:500; padding:9px 20px;
+  cursor:pointer; user-select:none;
+}
+.sync-hint.hidden { display:none; }
+.sync-hint .mi { font-size:16px; color:var(--primary); }
+.sync-hint-text { flex:1; }
 @keyframes spin { to { transform:rotate(360deg); } }
 </style>
 </head>
@@ -877,6 +887,11 @@ input, button, .poppins,
   <div class="main-header">
     <div class="header-name" id="greetingName">使用者</div>
     <div class="avatar-btn" id="userAvatar" onclick="showProfile()">U</div>
+  </div>
+  <div id="syncHint" class="sync-hint hidden" onclick="manualSync()">
+    <span class="mi">cloud_off</span>
+    <span class="sync-hint-text">點此重新連線 Google 以同步資料</span>
+    <span class="mi" style="font-size:14px;opacity:0.5">chevron_right</span>
   </div>
   <div class="search-section">
     <div class="search-wrap">
@@ -1105,6 +1120,11 @@ function showToast(msg, type=''){
   setTimeout(()=>{ el.className = 'toast'; }, 2500);
 }
 
+function showSyncHint(show){
+  const el = document.getElementById('syncHint');
+  if(el) el.classList.toggle('hidden', !show);
+}
+
 function showSyncOverlay(show, label='正在同步資料…'){
   document.getElementById('syncOverlay').classList.toggle('hidden', !show);
   if(label) document.getElementById('syncLabel').textContent = label;
@@ -1251,7 +1271,7 @@ function initGoogleAuth(){
   if(typeof google === 'undefined' || !google.accounts){ setTimeout(initGoogleAuth, 200); return; }
   googleTokenClient = google.accounts.oauth2.initTokenClient({
     client_id: GOOGLE_CLIENT_ID,
-    scope: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.metadata.readonly email profile',
+    scope: 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file email profile',
     callback: ()=>{},
   });
 }
@@ -1509,28 +1529,46 @@ async function ensureSheet(token){
 }
 
 async function createSpreadsheet(token){
-  const reqBody = {
-    properties: { title: 'Echo 暗號本' },
-    sheets: [
-      { properties: { title: SHEET_NAME } },
-      { properties: { title: SETTINGS_SHEET } }
-    ]
-  };
-  console.log('[Echo] createSpreadsheet: POST https://sheets.googleapis.com/v4/spreadsheets');
-  console.log('[Echo] createSpreadsheet: request body =', JSON.stringify(reqBody, null, 2));
-  const resp = await fetch('https://sheets.googleapis.com/v4/spreadsheets', {
+  // Step 1: Create the file via Drive API with parents:['root'] so it appears in My Drive
+  const driveReqBody = { name: 'Echo 暗號本', mimeType: 'application/vnd.google-apps.spreadsheet', parents: ['root'] };
+  console.log('[Echo] createSpreadsheet: POST https://www.googleapis.com/drive/v3/files');
+  console.log('[Echo] createSpreadsheet: request body =', JSON.stringify(driveReqBody, null, 2));
+  const driveResp = await fetch('https://www.googleapis.com/drive/v3/files', {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(reqBody)
+    body: JSON.stringify(driveReqBody)
   });
-  console.log('[Echo] createSpreadsheet: HTTP', resp.status, resp.statusText);
-  const data = await resp.json();
-  console.log('[Echo] createSpreadsheet: response body =', JSON.stringify(data, null, 2));
-  if(!resp.ok) throw new Error('create:' + resp.status + ' ' + JSON.stringify(data.error));
-  console.log('[Echo] createSpreadsheet: SUCCESS — id =', data.spreadsheetId);
-  localStorage.setItem(SHEET_ID_KEY + currentUser, data.spreadsheetId);
-  await writeSheet(data.spreadsheetId, token, [SHEET_COLS]);
-  return data.spreadsheetId;
+  console.log('[Echo] createSpreadsheet: Drive API HTTP', driveResp.status, driveResp.statusText);
+  const driveData = await driveResp.json();
+  console.log('[Echo] createSpreadsheet: Drive API response =', JSON.stringify(driveData, null, 2));
+  if(!driveResp.ok) throw new Error('create:' + driveResp.status + ' ' + JSON.stringify(driveData.error));
+  const spreadsheetId = driveData.id;
+  console.log('[Echo] createSpreadsheet: file created, id =', spreadsheetId);
+
+  // Step 2: Get the default sheet's ID so we can rename it
+  const metaResp = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets/properties`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  const meta = await metaResp.json();
+  const firstSheetId = meta.sheets[0].properties.sheetId;
+  console.log('[Echo] createSpreadsheet: default sheet id =', firstSheetId);
+
+  // Step 3: Rename default sheet to EchoData, add 設定 sheet
+  const batchResp = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requests: [
+      { updateSheetProperties: { properties: { sheetId: firstSheetId, title: SHEET_NAME }, fields: 'title' } },
+      { addSheet: { properties: { title: SETTINGS_SHEET } } }
+    ]})
+  });
+  console.log('[Echo] createSpreadsheet: batchUpdate HTTP', batchResp.status);
+
+  localStorage.setItem(SHEET_ID_KEY + currentUser, spreadsheetId);
+  await writeSheet(spreadsheetId, token, [SHEET_COLS]);
+  console.log('[Echo] createSpreadsheet: SUCCESS — id =', spreadsheetId);
+  return spreadsheetId;
 }
 
 async function writeSheet(sheetId, token, rows){
@@ -1745,6 +1783,7 @@ async function manualSync(){
   );
   try {
     await Promise.race([doSync(), timeoutPromise]);
+    showSyncHint(false);
     showToast('同步完成', 'success');
     document.getElementById('profileMeta').textContent = '已連結 Google Sheets';
   } catch(e){
@@ -1953,12 +1992,12 @@ function loginSuccess(user){
   buildCatFilter(); renderList();
   showScreen('mainScreen');
 
-  // If token is cached (just did full OAuth login), sync immediately.
-  // If not (PIN login after restart), request a silent token first, then sync.
   if(getTokenIfValid()){
+    showSyncHint(false);
     syncFromSheetsBackground();
   } else {
-    requestToken('').then(() => syncFromSheetsBackground()).catch(() => {});
+    // Token expired — show tappable hint; never auto-popup OAuth
+    showSyncHint(true);
   }
 }
 
