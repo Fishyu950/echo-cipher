@@ -9,6 +9,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Kenia&display=swap" rel="stylesheet">
 <script src="https://accounts.google.com/gsi/client" async></script>
 <style>
 :root {
@@ -604,12 +605,10 @@ input, button, .poppins,
   transform:translate(-50%,-50%) scale(.4); opacity:0;
   pointer-events:none; z-index:15; will-change:transform,opacity;
 }
-.lock-bg {
-  width:64px; height:64px; background:var(--primary); border-radius:20px;
-  display:flex; align-items:center; justify-content:center;
+.lock-logo {
+  width:64px; height:64px; border-radius:50%; display:block;
   box-shadow:0 8px 28px rgba(245,166,35,0.42);
 }
-.lock-bg .mi { font-size:30px; color:white; }
 /* surrounding icons (stage 3-4) */
 .intro-si {
   position:absolute; left:50%; top:40%;
@@ -627,16 +626,18 @@ input, button, .poppins,
   text-align:center; z-index:8; pointer-events:none;
   white-space:nowrap; will-change:transform,opacity;
 }
-.intro-wm { font-family:'Poppins',sans-serif; font-size:34px; font-weight:300; color:var(--ink); letter-spacing:10px; }
+.intro-wm { font-family:'Kenia',sans-serif; font-size:36px; color:var(--ink); letter-spacing:0.05em; }
 .intro-tag { font-family:'Poppins',sans-serif; font-size:13px; font-style:italic; font-weight:300; color:var(--ink3); margin-top:12px; letter-spacing:.07em; }
 /* login (stage 6) */
 #introLogin {
-  position:absolute; bottom:72px; left:50%;
+  position:absolute; top:65%; left:50%;
   width:calc(100% - 80px); max-width:350px;
   transform:translateX(-50%) translateY(20px); opacity:0;
   z-index:20; pointer-events:none;
 }
 .google-signin-btn { width:100%; padding:16px 20px; background:transparent; border:1px solid rgba(42,37,32,.2); border-radius:var(--radius-lg); display:flex; align-items:center; justify-content:center; gap:14px; font-family:'Poppins',sans-serif; font-size:14px; font-weight:400; letter-spacing:.04em; color:var(--ink2); cursor:pointer; transition:all .2s; box-shadow:none; }
+.google-signin-btn:hover { background:#E59A2D; color:white; border-color:#E59A2D; }
+.google-signin-btn:hover svg { filter:brightness(0) invert(1); }
 .google-signin-btn:active { transform:scale(.98); background:rgba(42,37,32,.04); }
 .welcome-note { text-align:center; font-size:11px; color:var(--ink4); margin-top:20px; line-height:2; letter-spacing:.03em; }
 
@@ -703,9 +704,9 @@ input, button, .poppins,
   </div>
   <!-- s1-s2: dot -->
   <div id="introDot"></div>
-  <!-- s3-s5: lock -->
+  <!-- s3-s5: logo -->
   <div id="introLock">
-    <div class="lock-bg"><span class="mi">lock</span></div>
+    <img src="icon.svg" class="lock-logo" alt="Echo">
   </div>
   <!-- s3-s4: surrounding icons -->
   <div class="intro-si" id="iSi1"><span class="mi">mail</span></div>
