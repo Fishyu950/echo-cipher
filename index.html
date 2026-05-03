@@ -1448,6 +1448,26 @@ async function findExistingSheet(token){
   return found;
 }
 
+// Add 設定 sheet to an existing spreadsheet that was created without it
+async function ensureSettingsSheet(sheetId, token){
+  const resp = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}?fields=sheets/properties/title`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if(!resp.ok) return;
+  const data = await resp.json();
+  const titles = (data.sheets || []).map(s => s.properties.title);
+  console.log('[Echo] ensureSettingsSheet: existing tabs =', titles);
+  if(titles.includes(SETTINGS_SHEET)) return;
+  console.log('[Echo] ensureSettingsSheet: 設定 tab missing — adding via batchUpdate...');
+  const addResp = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}:batchUpdate`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requests: [{ addSheet: { properties: { title: SETTINGS_SHEET } } }] })
+  });
+  console.log('[Echo] ensureSettingsSheet: addSheet HTTP', addResp.status);
+}
+
 // Resolve sheet ID: localStorage → verify → Drive search → create
 async function ensureSheet(token){
   let sheetId = currentUser ? localStorage.getItem(SHEET_ID_KEY + currentUser) : null;
@@ -1479,6 +1499,9 @@ async function ensureSheet(token){
   if(!sheetId){
     console.log('[Echo] ensureSheet: no sheet found anywhere — creating new spreadsheet...');
     sheetId = await createSpreadsheet(token);
+  } else {
+    // Pre-existing sheet: make sure 設定 tab exists (older sheets may not have it)
+    await ensureSettingsSheet(sheetId, token);
   }
 
   console.log('[Echo] ensureSheet: DONE — resolved sheetId =', sheetId);
