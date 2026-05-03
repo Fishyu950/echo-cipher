@@ -1271,7 +1271,7 @@ function initGoogleAuth(){
   if(typeof google === 'undefined' || !google.accounts){ setTimeout(initGoogleAuth, 200); return; }
   googleTokenClient = google.accounts.oauth2.initTokenClient({
     client_id: GOOGLE_CLIENT_ID,
-    scope: 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file email profile',
+    scope: 'https://www.googleapis.com/auth/drive.file email profile',
     callback: ()=>{},
   });
 }
