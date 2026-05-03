@@ -1449,22 +1449,18 @@ function doLogout(){
 
 // ── GOOGLE SHEETS API ──
 
-// Search Drive for an existing "Echo 暗號本" spreadsheet (prevents duplicates)
+// Search Drive for an existing "Echo 暗號本" file (no mimeType filter — finds old + new files)
 async function findExistingSheet(token){
-  const q = "name='Echo 暗號本' and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false";
-  const url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)&pageSize=5`;
-  console.log('[Echo] findExistingSheet: GET', url);
-  console.log('[Echo] findExistingSheet: query =', q);
-  const resp = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  const q = encodeURIComponent("name='Echo 暗號本' and trashed=false");
+  const searchUrl = 'https://www.googleapis.com/drive/v3/files?q=' + q + '&fields=files(id,name)&pageSize=5';
+  console.log('[Echo] findExistingSheet: GET', searchUrl);
+  const resp = await fetch(searchUrl, { headers: { Authorization: 'Bearer ' + token } });
   console.log('[Echo] findExistingSheet: HTTP', resp.status, resp.statusText);
   const data = await resp.json();
-  console.log('[Echo] findExistingSheet: response body =', JSON.stringify(data, null, 2));
-  if(!resp.ok){
-    console.warn('[Echo] findExistingSheet: Drive search FAILED — error:', data.error);
-    return null;
-  }
+  console.log('[Echo] findExistingSheet: response =', JSON.stringify(data, null, 2));
+  if(!resp.ok){ console.warn('[Echo] findExistingSheet: FAILED —', data.error); return null; }
   const found = (data.files && data.files[0]) ? data.files[0].id : null;
-  console.log('[Echo] findExistingSheet: files found =', data.files ? data.files.length : 0, '→ using id =', found);
+  console.log('[Echo] findExistingSheet: files found =', data.files ? data.files.length : 0, '→ id =', found);
   return found;
 }
 
@@ -1488,44 +1484,51 @@ async function ensureSettingsSheet(sheetId, token){
   console.log('[Echo] ensureSettingsSheet: addSheet HTTP', addResp.status);
 }
 
-// Resolve sheet ID: localStorage → verify → Drive search → create
+// Resolve sheet ID: Drive search (primary) → localStorage fallback → create
 async function ensureSheet(token){
-  let sheetId = currentUser ? localStorage.getItem(SHEET_ID_KEY + currentUser) : null;
-  console.log('[Echo] ensureSheet: START — currentUser =', currentUser, '| cached sheetId =', sheetId);
+  console.log('[Echo] ensureSheet: START — currentUser =', currentUser);
+  let sheetId = null;
 
+  // Step 1: Drive search is always the primary lookup
+  sheetId = await findExistingSheet(token);
   if(sheetId){
-    const verifyUrl = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}?fields=spreadsheetId,properties/title`;
-    console.log('[Echo] ensureSheet: verifying cached sheet — GET', verifyUrl);
-    const check = await fetch(verifyUrl, { headers: { Authorization: `Bearer ${token}` } });
-    console.log('[Echo] ensureSheet: verify HTTP', check.status, check.statusText);
-    const checkBody = await check.json();
-    console.log('[Echo] ensureSheet: verify response body =', JSON.stringify(checkBody, null, 2));
-    if(!check.ok){
-      console.warn('[Echo] ensureSheet: cached sheet INVALID (', check.status, '), clearing localStorage');
-      localStorage.removeItem(SHEET_ID_KEY + currentUser);
-      sheetId = null;
+    console.log('[Echo] ensureSheet: Drive found sheet, updating localStorage:', sheetId);
+    localStorage.setItem(SHEET_ID_KEY + currentUser, sheetId);
+  }
+
+  // Step 2: Drive came up empty — verify locally cached ID as fallback
+  if(!sheetId && currentUser){
+    const cached = localStorage.getItem(SHEET_ID_KEY + currentUser);
+    if(cached){
+      console.log('[Echo] ensureSheet: Drive search empty, verifying cached id:', cached);
+      const check = await fetch(
+        'https://sheets.googleapis.com/v4/spreadsheets/' + cached + '?fields=spreadsheetId',
+        { headers: { Authorization: 'Bearer ' + token } }
+      );
+      console.log('[Echo] ensureSheet: verify cached HTTP', check.status);
+      if(check.ok){
+        sheetId = cached;
+        console.log('[Echo] ensureSheet: using cached id (file may not be in Drive root):', sheetId);
+      } else {
+        localStorage.removeItem(SHEET_ID_KEY + currentUser);
+        console.log('[Echo] ensureSheet: cached id invalid, cleared');
+      }
     }
   }
 
+  // Step 3: Nothing found — create new spreadsheet in Drive root
+  let isNew = false;
   if(!sheetId){
-    console.log('[Echo] ensureSheet: no valid cached id — searching Drive...');
-    sheetId = await findExistingSheet(token);
-    if(sheetId){
-      localStorage.setItem(SHEET_ID_KEY + currentUser, sheetId);
-      console.log('[Echo] ensureSheet: Drive search found sheet, saved to localStorage:', sheetId);
-    }
-  }
-
-  if(!sheetId){
-    console.log('[Echo] ensureSheet: no sheet found anywhere — creating new spreadsheet...');
+    console.log('[Echo] ensureSheet: no sheet found anywhere — creating new...');
     sheetId = await createSpreadsheet(token);
+    isNew = true;
+    console.log('[Echo] ensureSheet: created new sheet:', sheetId);
   } else {
-    // Pre-existing sheet: make sure 設定 tab exists (older sheets may not have it)
     await ensureSettingsSheet(sheetId, token);
   }
 
-  console.log('[Echo] ensureSheet: DONE — resolved sheetId =', sheetId);
-  return sheetId;
+  console.log('[Echo] ensureSheet: DONE — sheetId =', sheetId, '| isNew =', isNew);
+  return { sheetId, isNew };
 }
 
 async function createSpreadsheet(token){
@@ -1636,7 +1639,7 @@ async function loadFromSheets(email){
 
 async function saveToSheets(email, data){
   const token = await ensureToken();
-  const sheetId = await ensureSheet(token);
+  const { sheetId } = await ensureSheet(token);
   const rows = [SHEET_COLS, ...data.map(e=>[
     e.platform, e.account, e.hint||'', e.note||'', e.category||'其他', e.createdAt
   ])];
@@ -1726,12 +1729,15 @@ async function syncFromSheetsBackground(){
   const token = getTokenIfValid();
   if(!token || !currentUser) return;
   try {
-    // Pull entries (Sheets is source of truth)
+    // Pull entries — but protect local data if Sheets is empty and local has records
     const sheetEntries = await loadFromSheets(currentUser);
-    if(sheetEntries !== null){
+    if(sheetEntries !== null && sheetEntries.length > 0){
       entries = sheetEntries;
       saveUserData(currentUser, entries);
       renderList();
+    } else if(sheetEntries !== null && sheetEntries.length === 0 && entries.length > 0){
+      // Sheets is empty but local has data — upload local data to protect it
+      await saveToSheets(currentUser, entries);
     }
     // Pull nickname from 設定 sheet
     const sheetId = localStorage.getItem(SHEET_ID_KEY + currentUser);
@@ -1753,26 +1759,33 @@ async function doSync(){
   console.log('[Echo] doSync: token acquired, expires in',
     Math.round((tokenExpiry - Date.now()) / 1000), 's');
 
-  const sheetId = await ensureSheet(token);
-  console.log('[Echo] doSync: sheetId =', sheetId);
+  const { sheetId, isNew } = await ensureSheet(token);
+  console.log('[Echo] doSync: sheetId =', sheetId, '| isNew =', isNew);
 
-  const sheetEntries = await loadFromSheets(currentUser);
-  console.log('[Echo] doSync: loaded', sheetEntries ? sheetEntries.length : 'null', 'entries from Sheets');
-  if(sheetEntries !== null){
-    entries = sheetEntries;
-    saveUserData(currentUser, entries);
-    renderList();
-  }
-
-  await saveToSheets(currentUser, entries);
-  console.log('[Echo] doSync: saved', entries.length, 'entries to Sheets');
-
-  const remoteNick = await loadNickFromSheets(sheetId, token);
-  if(remoteNick){
-    const def = currentUser.includes('@') ? currentUser.split('@')[0] : currentUser;
-    if(remoteNick !== (localStorage.getItem(NICK_KEY + currentUser) || def)) applyNick(remoteNick);
-  } else {
+  if(isNew){
+    // Sheet was just created (user may have deleted it) — push local data up, don't pull empty sheet
+    console.log('[Echo] doSync: new sheet — uploading local data (local → Sheets)');
+    await saveToSheets(currentUser, entries);
+    console.log('[Echo] doSync: uploaded', entries.length, 'entries to new sheet');
     await saveNickToSheets(getNick());
+  } else {
+    // Existing sheet — Sheets is source of truth
+    const sheetEntries = await loadFromSheets(currentUser);
+    console.log('[Echo] doSync: loaded', sheetEntries ? sheetEntries.length : 'null', 'entries from Sheets');
+    if(sheetEntries !== null){
+      entries = sheetEntries;
+      saveUserData(currentUser, entries);
+      renderList();
+    }
+    await saveToSheets(currentUser, entries);
+    console.log('[Echo] doSync: saved', entries.length, 'entries to Sheets');
+    const remoteNick = await loadNickFromSheets(sheetId, token);
+    if(remoteNick){
+      const def = currentUser.includes('@') ? currentUser.split('@')[0] : currentUser;
+      if(remoteNick !== (localStorage.getItem(NICK_KEY + currentUser) || def)) applyNick(remoteNick);
+    } else {
+      await saveNickToSheets(getNick());
+    }
   }
 }
 
@@ -1996,8 +2009,14 @@ function loginSuccess(user){
     showSyncHint(false);
     syncFromSheetsBackground();
   } else {
-    // Token expired — show tappable hint; never auto-popup OAuth
-    showSyncHint(true);
+    // Try silent token refresh — no popup if user has active Google session in browser
+    requestToken('').then(() => {
+      showSyncHint(false);
+      syncFromSheetsBackground();
+    }).catch(() => {
+      // Silent auth failed — show tappable hint, let user decide
+      showSyncHint(true);
+    });
   }
 }
 
