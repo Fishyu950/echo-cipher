@@ -531,15 +531,20 @@ input, button, .poppins,
 .profile-row-arrow .mi { font-size: 18px; color: var(--ink4); }
 .logout-row .profile-row-label { color: #b85a5a; }
 .logout-row .profile-row-icon .mi { color: #b85a5a; }
-.profile-action-btn {
-  flex:1; display:flex; align-items:center; justify-content:center; gap:7px;
-  padding:12px 8px; background:var(--bg); border:1.5px solid var(--border);
-  border-radius:var(--radius-md); font-family:'Poppins','Noto Sans TC',sans-serif;
-  font-size:13px; font-weight:500; color:var(--ink2); cursor:pointer;
-  transition:all 0.15s;
+.profile-io-row { display:flex; gap:10px; }
+.profile-io-card {
+  flex:1; background:var(--bg); border-radius:var(--radius-md);
+  padding:16px 12px; text-align:center; cursor:pointer; transition:all 0.15s;
+  border:none;
 }
-.profile-action-btn:active { background:var(--bg2); }
-.profile-action-btn .mi { font-size:18px; color:var(--primary); }
+.profile-io-card:active { background:var(--bg2); }
+.profile-io-card .mi { font-size:26px; color:var(--primary); display:block; margin-bottom:6px; }
+.profile-io-lbl { font-size:12px; font-weight:600; color:var(--ink2); font-family:'Poppins','Noto Sans TC',sans-serif; }
+.nick-input-inline {
+  border:none; border-bottom:2px solid var(--primary); background:transparent;
+  font-family:'Poppins','Noto Sans TC',sans-serif; font-size:15px;
+  font-weight:600; color:var(--ink); outline:none; width:130px; padding:2px 4px;
+}
 
 @keyframes fadeDown { from{opacity:0;transform:translateY(-20px)} to{opacity:1;transform:translateY(0)} }
 @keyframes fadeUp   { from{opacity:0;transform:translateY(18px)}  to{opacity:1;transform:translateY(0)} }
@@ -962,18 +967,38 @@ input, button, .poppins,
     <div class="nav-title">帳號設定</div>
   </div>
   <div class="profile-body">
+    <!-- 1. 頭貼 + Email + 已連結狀態 -->
     <div class="profile-card">
       <div class="profile-avatar-big" id="profileAvatarBig">U</div>
       <div class="profile-username" id="profileUsername">使用者</div>
       <div class="profile-meta" id="profileMeta">尚未同步至雲端</div>
     </div>
+    <!-- 2. 匯出／匯入卡片（左右並排，統計卡片樣式） -->
     <div class="profile-card">
-      <div class="profile-row" onclick="editNickname()">
-        <div class="profile-row-icon"><span class="mi">badge</span></div>
-        <div class="profile-row-label">暱稱：<span id="profileNickname" style="font-weight:600;color:var(--ink)">--</span></div>
-        <div class="profile-row-arrow"><span class="mi">edit</span></div>
+      <div class="profile-io-row">
+        <button class="profile-io-card" onclick="exportData()">
+          <span class="mi">download</span>
+          <div class="profile-io-lbl">匯出備份</div>
+        </button>
+        <button class="profile-io-card" onclick="importData()">
+          <span class="mi">upload</span>
+          <div class="profile-io-lbl">匯入資料</div>
+        </button>
       </div>
     </div>
+    <!-- 3. 暱稱設定（行內編輯） -->
+    <div class="profile-card">
+      <div class="profile-row" style="cursor:default">
+        <div class="profile-row-icon"><span class="mi">badge</span></div>
+        <div class="profile-row-label" id="nickDisplay">
+          暱稱：<span id="profileNickname" style="font-weight:600;color:var(--ink)">--</span>
+        </div>
+        <div class="profile-row-arrow" id="nickEditBtn" onclick="startNickEdit()" style="cursor:pointer;padding:4px">
+          <span class="mi">edit</span>
+        </div>
+      </div>
+    </div>
+    <!-- 4. 立即同步 -->
     <div class="profile-card">
       <div class="profile-row" onclick="manualSync()">
         <div class="profile-row-icon"><span class="mi">sync</span></div>
@@ -981,16 +1006,7 @@ input, button, .poppins,
         <div class="profile-row-arrow"><span class="mi">chevron_right</span></div>
       </div>
     </div>
-    <div class="profile-card">
-      <div style="display:flex;gap:10px;">
-        <button class="profile-action-btn" onclick="exportData()">
-          <span class="mi">download</span>匯出資料
-        </button>
-        <button class="profile-action-btn" onclick="importData()">
-          <span class="mi">upload</span>匯入資料
-        </button>
-      </div>
-    </div>
+    <!-- 5. 登出 -->
     <div class="profile-card">
       <div class="profile-row logout-row" onclick="doLogout()">
         <div class="profile-row-icon"><span class="mi">logout</span></div>
@@ -1095,24 +1111,50 @@ function getNick(){
   return localStorage.getItem(NICK_KEY + currentUser) || def;
 }
 
-function showProfile(){
+function resetNickDisplay(){
   const nick = getNick();
+  const display = document.getElementById('nickDisplay');
+  const btn = document.getElementById('nickEditBtn');
+  if(!display || !btn) return;
+  display.innerHTML = `暱稱：<span id="profileNickname" style="font-weight:600;color:var(--ink)">${nick}</span>`;
+  btn.innerHTML = '<span class="mi">edit</span>';
+  btn.onclick = startNickEdit;
+}
+
+function startNickEdit(){
+  if(!currentUser) return;
+  const nick = getNick();
+  const display = document.getElementById('nickDisplay');
+  const btn = document.getElementById('nickEditBtn');
+  display.innerHTML = `暱稱：<input id="nickInput" class="nick-input-inline" value="${nick}"
+    onkeydown="if(event.key==='Enter'){event.preventDefault();finishNickEdit(this.value)}"
+    onblur="finishNickEdit(this.value)">`;
+  btn.innerHTML = '<span class="mi" style="color:var(--primary)">check</span>';
+  btn.onclick = () => { const inp = document.getElementById('nickInput'); if(inp) finishNickEdit(inp.value); };
+  setTimeout(() => { const inp = document.getElementById('nickInput'); if(inp) inp.focus(); }, 30);
+}
+
+function finishNickEdit(val){
+  if(!document.getElementById('nickInput')) return; // guard against double-fire
+  const def = currentUser.includes('@') ? currentUser.split('@')[0] : currentUser;
+  const nick = val.trim() || def;
+  resetNickDisplay();
+  applyNick(nick);
+  saveNickToSheets(nick);
+}
+
+function showProfile(){
   applyAvatars(currentUser);
   document.getElementById('profileUsername').textContent = currentUser || '使用者';
-  document.getElementById('profileNickname').textContent = nick;
+  resetNickDisplay();
   const sheetId = currentUser ? localStorage.getItem(SHEET_ID_KEY + currentUser) : null;
   document.getElementById('profileMeta').textContent = sheetId ? '已連結 Google Sheets' : '尚未同步至雲端';
   showScreen('profileScreen');
 }
 
 function editNickname(){
-  if(!currentUser) return;
-  const def = currentUser.includes('@') ? currentUser.split('@')[0] : currentUser;
-  const current = localStorage.getItem(NICK_KEY + currentUser) || def;
-  const val = prompt('編輯暱稱', current);
-  if(val === null) return;
-  const nick = val.trim() || def;
-  applyNick(nick);
+  startNickEdit();
+}
   saveNickToSheets(nick);
 }
 
