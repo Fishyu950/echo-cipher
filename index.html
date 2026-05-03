@@ -531,6 +531,15 @@ input, button, .poppins,
 .profile-row-arrow .mi { font-size: 18px; color: var(--ink4); }
 .logout-row .profile-row-label { color: #b85a5a; }
 .logout-row .profile-row-icon .mi { color: #b85a5a; }
+.profile-action-btn {
+  flex:1; display:flex; align-items:center; justify-content:center; gap:7px;
+  padding:12px 8px; background:var(--bg); border:1.5px solid var(--border);
+  border-radius:var(--radius-md); font-family:'Poppins','Noto Sans TC',sans-serif;
+  font-size:13px; font-weight:500; color:var(--ink2); cursor:pointer;
+  transition:all 0.15s;
+}
+.profile-action-btn:active { background:var(--bg2); }
+.profile-action-btn .mi { font-size:18px; color:var(--primary); }
 
 @keyframes fadeDown { from{opacity:0;transform:translateY(-20px)} to{opacity:1;transform:translateY(0)} }
 @keyframes fadeUp   { from{opacity:0;transform:translateY(18px)}  to{opacity:1;transform:translateY(0)} }
@@ -642,6 +651,13 @@ input, button, .poppins,
 .google-signin-btn:hover svg { filter:brightness(0) invert(1); }
 .google-signin-btn:active { transform:scale(.98); background:rgba(42,37,32,.04); }
 .welcome-note { text-align:center; font-size:11px; color:var(--ink4); margin-top:20px; line-height:2; letter-spacing:.03em; }
+.return-indicator {
+  display:flex; align-items:center; justify-content:center; gap:9px;
+  background:rgba(245,166,35,0.1); border:1px solid rgba(245,166,35,0.3);
+  border-radius:999px; padding:13px 20px;
+  font-family:'Poppins',sans-serif; font-size:13px; color:var(--ink2);
+}
+.return-dot { width:8px; height:8px; border-radius:50%; background:var(--primary); flex-shrink:0; }
 
 /* PIN */
 #setPinScreen,#confirmPinScreen,#enterPinScreen,#forgotPinScreen { background:var(--bg); align-items:center; justify-content:center; padding:48px 28px; }
@@ -722,16 +738,26 @@ input, button, .poppins,
   </div>
   <!-- s6: login -->
   <div id="introLogin">
-    <button class="google-signin-btn" onclick="googleLogin()">
-      <svg viewBox="0 0 24 24" style="width:18px;height:18px;flex-shrink:0">
-        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
-        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-      </svg>
-      使用 Google 帳號登入
-    </button>
-    <p class="welcome-note">登入即表示你同意 Echo 使用 Google Sheets<br>儲存你的個人資料於你的帳號空間</p>
+    <!-- New user state -->
+    <div id="introLoginNew">
+      <button class="google-signin-btn" onclick="googleLogin()">
+        <svg viewBox="0 0 24 24" style="width:18px;height:18px;flex-shrink:0">
+          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
+          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+        </svg>
+        使用 Google 帳號登入
+      </button>
+      <p class="welcome-note">登入即表示你同意 Echo 使用 Google Sheets<br>儲存你的個人資料於你的帳號空間</p>
+    </div>
+    <!-- Returning user state -->
+    <div id="introLoginReturn" style="display:none">
+      <div class="return-indicator">
+        <span class="return-dot"></span>已連結 Google
+      </div>
+      <p class="welcome-note" id="returnUserEmail"></p>
+    </div>
   </div>
 </div>
 
@@ -776,7 +802,7 @@ input, button, .poppins,
 <!-- ════ ENTER PIN ════ -->
 <div id="enterPinScreen" class="screen">
   <div style="position:absolute;top:20px;left:20px;">
-    <button class="back-to-welcome-btn" onclick="showScreen('welcomeScreen')">
+    <button class="back-to-welcome-btn" onclick="backFromPin()">
       <span class="mi">arrow_back</span>
     </button>
   </div>
@@ -826,7 +852,7 @@ input, button, .poppins,
 <!-- ════ MAIN ════ -->
 <div id="mainScreen" class="screen">
   <div class="main-header">
-    <div class="header-name" id="greetingName" onclick="editNickname()" style="cursor:pointer">使用者</div>
+    <div class="header-name" id="greetingName">使用者</div>
     <div class="avatar-btn" id="userAvatar" onclick="showProfile()">U</div>
   </div>
   <div class="search-section">
@@ -872,6 +898,10 @@ input, button, .poppins,
       <div class="emoji-grid" id="emojiGrid"></div>
     </div>
     <div class="form-card">
+      <div class="form-card-title"><span class="mi">category</span>分類</div>
+      <div class="cat-chips-wrap" id="catSelectRow"></div>
+    </div>
+    <div class="form-card">
       <div class="form-card-title"><span class="mi">info</span>基本資訊</div>
       <label class="edit-field-label">平台 / 網站名稱</label>
       <div class="edit-field-wrap">
@@ -883,10 +913,6 @@ input, button, .poppins,
         <span class="mi edit-field-icon">alternate_email</span>
         <input class="edit-input" id="fAccount" type="text" placeholder="登入用的帳號">
       </div>
-    </div>
-    <div class="form-card">
-      <div class="form-card-title"><span class="mi">category</span>分類</div>
-      <div class="cat-chips-wrap" id="catSelectRow"></div>
     </div>
     <div class="form-card">
       <div class="form-card-title"><span class="mi">lightbulb</span>暗號提示</div>
@@ -956,15 +982,13 @@ input, button, .poppins,
       </div>
     </div>
     <div class="profile-card">
-      <div class="profile-row" onclick="exportData()">
-        <div class="profile-row-icon"><span class="mi">download</span></div>
-        <div class="profile-row-label">匯出資料</div>
-        <div class="profile-row-arrow"><span class="mi">chevron_right</span></div>
-      </div>
-      <div class="profile-row" onclick="importData()">
-        <div class="profile-row-icon"><span class="mi">upload</span></div>
-        <div class="profile-row-label">匯入資料</div>
-        <div class="profile-row-arrow"><span class="mi">chevron_right</span></div>
+      <div style="display:flex;gap:10px;">
+        <button class="profile-action-btn" onclick="exportData()">
+          <span class="mi">download</span>匯出資料
+        </button>
+        <button class="profile-action-btn" onclick="importData()">
+          <span class="mi">upload</span>匯入資料
+        </button>
       </div>
     </div>
     <div class="profile-card">
@@ -1013,8 +1037,9 @@ const CATS = [
 const EMOJIS = ['🔑','💳','📧','🛒','💼','🎮','🏦','📱','🌐','🔒','⭐','🎵','📷','🚀','💡','🎯'];
 const PER_PAGE = 10;
 const DATA_PFX = 'echo_data_';
-const PIN_KEY = 'echo_pin_', USER_KEY = 'echo_current_user', SHEET_ID_KEY = 'echo_sheet_', NICK_KEY = 'echo_nick_';
+const PIN_KEY = 'echo_pin_', USER_KEY = 'echo_current_user', SHEET_ID_KEY = 'echo_sheet_', NICK_KEY = 'echo_nick_', AVATAR_KEY = 'echo_avatar_';
 const SHEET_NAME = 'EchoData';
+const SETTINGS_SHEET = '設定';
 const SHEET_COLS = ['平台','帳號','暗號','備註','分類','建立時間'];
 
 // ── STATE ──
@@ -1072,7 +1097,7 @@ function getNick(){
 
 function showProfile(){
   const nick = getNick();
-  document.getElementById('profileAvatarBig').textContent = nick[0].toUpperCase();
+  applyAvatars(currentUser);
   document.getElementById('profileUsername').textContent = currentUser || '使用者';
   document.getElementById('profileNickname').textContent = nick;
   const sheetId = currentUser ? localStorage.getItem(SHEET_ID_KEY + currentUser) : null;
@@ -1087,12 +1112,8 @@ function editNickname(){
   const val = prompt('編輯暱稱', current);
   if(val === null) return;
   const nick = val.trim() || def;
-  localStorage.setItem(NICK_KEY + currentUser, nick);
-  document.getElementById('greetingName').textContent = 'Hi, ' + nick;
-  document.getElementById('userAvatar').textContent = nick[0].toUpperCase();
-  const pn = document.getElementById('profileNickname');
-  if(pn) pn.textContent = nick;
-  document.getElementById('profileAvatarBig').textContent = nick[0].toUpperCase();
+  applyNick(nick);
+  saveNickToSheets(nick);
 }
 
 function exportData(){
@@ -1186,6 +1207,11 @@ async function ensureToken(){
   return requestToken('');
 }
 
+// Returns cached token only — never triggers OAuth popup (used for background operations)
+function getTokenIfValid(){
+  return (accessToken && Date.now() < tokenExpiry) ? accessToken : null;
+}
+
 async function googleLogin(){
   if(GOOGLE_CLIENT_ID === 'YOUR_CLIENT_ID_HERE'){
     alert('尚未設定 Google Client ID\n\n請參閱說明，在 Google Cloud Console 建立 OAuth 用戶端並填入 GOOGLE_CLIENT_ID');
@@ -1200,6 +1226,7 @@ async function googleLogin(){
     const info = await resp.json();
     if(!info.email) throw new Error('no email');
     const email = info.email;
+    if(info.picture) localStorage.setItem(AVATAR_KEY + email, info.picture);
     pendingUser = email;
     ['setPinUserName','confirmPinUserName','enterPinUserName'].forEach(id=>{
       document.getElementById(id).textContent = email;
@@ -1363,7 +1390,10 @@ async function createSpreadsheet(token){
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       properties: { title: 'Echo 暗號本' },
-      sheets: [{ properties: { title: SHEET_NAME } }]
+      sheets: [
+        { properties: { title: SHEET_NAME } },
+        { properties: { title: SETTINGS_SHEET } }
+      ]
     })
   });
   if(!resp.ok) throw new Error('create:'+resp.status);
@@ -1445,28 +1475,107 @@ async function saveToSheets(email, data){
   await writeSheet(sheetId, token, rows);
 }
 
-// ── BACKGROUND SYNC ──
-async function syncToSheetsBackground(){
+// ── NICKNAME ↔ SHEETS ──
+async function loadNickFromSheets(sheetId, token){
   try {
-    const token = await ensureToken().catch(()=>null);
-    if(!token) return;
+    const resp = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(SETTINGS_SHEET)}!A:B`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if(!resp.ok) return null;
+    const rows = (await resp.json()).values || [];
+    const row = rows.find(r => r[0] === 'nickname');
+    return row ? (row[1] || null) : null;
+  } catch { return null; }
+}
+
+async function saveNickToSheets(nick){
+  const token = getTokenIfValid();
+  if(!token || !currentUser) return;
+  try {
+    const sheetId = localStorage.getItem(SHEET_ID_KEY + currentUser);
+    if(!sheetId) return;
+    await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(SETTINGS_SHEET)}!A1?valueInputOption=RAW`,
+      {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values: [['key','value'],['nickname', nick]], majorDimension: 'ROWS' })
+      }
+    );
+  } catch { /* silent */ }
+}
+
+// Called by onerror on avatar img — falls back to initial-letter circle
+function avatarImgError(img){
+  const el = img.parentElement;
+  el.style.background = 'var(--primary)';
+  el.innerHTML = el.dataset.fallback || '?';
+}
+
+function setAvatarEl(elId, url, fallbackChar){
+  const el = document.getElementById(elId);
+  if(!el) return;
+  el.dataset.fallback = fallbackChar;
+  if(url){
+    el.style.background = 'transparent';
+    el.innerHTML = `<img src="${url}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;display:block;" onerror="avatarImgError(this)">`;
+  } else {
+    el.style.background = 'var(--primary)';
+    el.innerHTML = fallbackChar;
+  }
+}
+
+function applyAvatars(user){
+  const nick = getNick();
+  const fallback = (nick || user || 'U')[0].toUpperCase();
+  const url = user ? localStorage.getItem(AVATAR_KEY + user) : null;
+  setAvatarEl('userAvatar', url, fallback);
+  setAvatarEl('profileAvatarBig', url, fallback);
+}
+
+function applyNick(nick){
+  localStorage.setItem(NICK_KEY + currentUser, nick);
+  document.getElementById('greetingName').textContent = 'Hi, ' + nick;
+  const pn = document.getElementById('profileNickname');
+  if(pn) pn.textContent = nick;
+  applyAvatars(currentUser);
+}
+
+// ── BACKGROUND SYNC ──
+// Uses only cached token — never pops an OAuth dialog for background operations.
+async function syncToSheetsBackground(){
+  const token = getTokenIfValid();
+  if(!token || !currentUser) return;
+  try {
     await saveToSheets(currentUser, entries);
     showToast('已同步至 Google Sheets', 'success');
     document.getElementById('profileMeta').textContent = '已連結 Google Sheets';
-  } catch(e){ showToast('同步失敗', 'error'); }
+  } catch(e){ /* silent */ }
 }
 
 async function syncFromSheetsBackground(){
+  const token = getTokenIfValid();
+  if(!token || !currentUser) return;
   try {
-    const token = await ensureToken().catch(()=>null);
-    if(!token) return;
+    // Pull entries (Sheets is source of truth)
     const sheetEntries = await loadFromSheets(currentUser);
-    if(sheetEntries === null) return;
-    entries = sheetEntries;
-    saveUserData(currentUser, entries);
-    renderList();
+    if(sheetEntries !== null){
+      entries = sheetEntries;
+      saveUserData(currentUser, entries);
+      renderList();
+    }
+    // Pull nickname from 設定 sheet
+    const sheetId = localStorage.getItem(SHEET_ID_KEY + currentUser);
+    if(sheetId){
+      const remoteNick = await loadNickFromSheets(sheetId, token);
+      if(remoteNick){
+        const def = currentUser.includes('@') ? currentUser.split('@')[0] : currentUser;
+        const localNick = localStorage.getItem(NICK_KEY + currentUser) || def;
+        if(remoteNick !== localNick) applyNick(remoteNick);
+      }
+    }
     document.getElementById('profileMeta').textContent = '已連結 Google Sheets';
-    showToast('資料已從雲端同步', 'success');
   } catch(e){ /* silent */ }
 }
 
@@ -1483,6 +1592,17 @@ async function manualSync(){
       renderList();
     }
     await saveToSheets(currentUser, entries);
+    // Sync nickname: pull remote first, then push local if no remote value
+    const sheetId = localStorage.getItem(SHEET_ID_KEY + currentUser);
+    if(sheetId){
+      const remoteNick = await loadNickFromSheets(sheetId, token);
+      if(remoteNick){
+        const def = currentUser.includes('@') ? currentUser.split('@')[0] : currentUser;
+        if(remoteNick !== (localStorage.getItem(NICK_KEY + currentUser)||def)) applyNick(remoteNick);
+      } else {
+        await saveNickToSheets(getNick());
+      }
+    }
     showToast('同步完成', 'success');
     document.getElementById('profileMeta').textContent = '已連結 Google Sheets';
   } catch(e){
@@ -1685,22 +1805,75 @@ function loginSuccess(user){
   const defaultNick = user.includes('@') ? user.split('@')[0] : user;
   const nick = localStorage.getItem(NICK_KEY + user) || defaultNick;
   document.getElementById('greetingName').textContent = 'Hi, ' + nick;
-  document.getElementById('userAvatar').textContent = nick[0].toUpperCase();
+  applyAvatars(user);
   activeCatFilter='全部'; currentPage=1;
   buildCatFilter(); renderList();
   showScreen('mainScreen');
-  syncFromSheetsBackground();
+
+  // If token is cached (just did full OAuth login), sync immediately.
+  // If not (PIN login after restart), request a silent token first, then sync.
+  if(getTokenIfValid()){
+    syncFromSheetsBackground();
+  } else {
+    requestToken('').then(() => syncFromSheetsBackground()).catch(() => {});
+  }
 }
 
 // ── INTRO ANIMATION ──
 function showWelcomeFinal(){
-  // Skip animation; jump straight to the finished state (used after logout)
   const s = (id,p) => Object.assign(document.getElementById(id).style, p);
   const n = 'none';
+  document.querySelectorAll('.rring').forEach(r => r.classList.remove('fire'));
+  ['iSi1','iSi2','iSi3','iSi4'].forEach(id =>
+    s(id, {transition:n, opacity:'0', transform:'translate(-50%,-50%) scale(0)'}));
   s('introDot',    {display:'none'});
   s('introLock',   {transition:n, opacity:'1', transform:'translate(-50%, calc(-50% - 96px)) scale(1)'});
   s('introText',   {transition:n, opacity:'1', transform:'translateX(-50%) translateY(-40px)'});
   s('introLogin',  {transition:n, opacity:'1', transform:'translateX(-50%) translateY(0)', pointerEvents:'auto'});
+  document.getElementById('introLoginNew').style.display = '';
+  document.getElementById('introLoginReturn').style.display = 'none';
+}
+
+// Reset all animation elements to pre-animation state
+function resetWelcomeForAnimation(){
+  const s = (id,p) => Object.assign(document.getElementById(id).style, p);
+  const n = 'none';
+  document.querySelectorAll('.rring').forEach(r => r.classList.remove('fire'));
+  ['iSi1','iSi2','iSi3','iSi4'].forEach(id =>
+    s(id, {transition:n, opacity:'0', transform:'translate(-50%,-50%) scale(0)'}));
+  s('introDot',   {display:'', transition:n, opacity:'0', transform:'translate(-50%,-50%) scale(.3)'});
+  s('introLock',  {transition:n, opacity:'0', transform:'translate(-50%,-50%) scale(.4)'});
+  s('introText',  {transition:n, opacity:'0', transform:'translateX(-50%) translateY(-20px)'});
+  s('introLogin', {transition:n, opacity:'0', transform:'translateX(-50%) translateY(20px)', pointerEvents:'none'});
+  document.getElementById('introLoginNew').style.display = '';
+  document.getElementById('introLoginReturn').style.display = 'none';
+}
+
+// Show final welcome state for a returning user (no animation, different bottom content)
+function showWelcomeForReturningUser(email){
+  const s = (id,p) => Object.assign(document.getElementById(id).style, p);
+  const n = 'none';
+  document.querySelectorAll('.rring').forEach(r => r.classList.remove('fire'));
+  ['iSi1','iSi2','iSi3','iSi4'].forEach(id =>
+    s(id, {transition:n, opacity:'0', transform:'translate(-50%,-50%) scale(0)'}));
+  s('introDot',   {display:'none'});
+  s('introLock',  {transition:n, opacity:'1', transform:'translate(-50%, calc(-50% - 96px)) scale(1)'});
+  s('introText',  {transition:n, opacity:'1', transform:'translateX(-50%) translateY(-40px)'});
+  s('introLogin', {transition:n, opacity:'1', transform:'translateX(-50%) translateY(0)', pointerEvents:'none'});
+  document.getElementById('introLoginNew').style.display = 'none';
+  document.getElementById('introLoginReturn').style.display = '';
+  document.getElementById('returnUserEmail').textContent = email;
+}
+
+// Back from PIN: confirm logout, then replay animation
+function backFromPin(){
+  if(!confirm('確定要登出嗎？')) return;
+  localStorage.removeItem(USER_KEY);
+  pendingUser = null;
+  currentPin = '';
+  resetWelcomeForAnimation();
+  showScreen('welcomeScreen');
+  runIntroAnimation();
 }
 
 function runIntroAnimation(){
@@ -1775,10 +1948,15 @@ function runIntroAnimation(){
   initCatScrollDrag();
   const savedUser = localStorage.getItem(USER_KEY);
   if(savedUser){
-    pendingUser = savedUser;
-    document.getElementById('enterPinUserName').textContent = savedUser;
-    buildKeypad('enterPinKeypad', enterPinPress);
-    showScreen('enterPinScreen');
+    // Show welcome screen in final state with "已連結 Google" indicator
+    showWelcomeForReturningUser(savedUser);
+    // Navigate to PIN after brief display so user sees they're returning
+    setTimeout(() => {
+      pendingUser = savedUser;
+      document.getElementById('enterPinUserName').textContent = savedUser;
+      buildKeypad('enterPinKeypad', enterPinPress);
+      showScreen('enterPinScreen');
+    }, 1000);
   } else {
     runIntroAnimation();
   }
