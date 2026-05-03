@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
-<link href="https://fonts.googleapis.com/css2?family=Kenia&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fugaz+One&display=swap" rel="stylesheet">
 <script src="https://accounts.google.com/gsi/client" async></script>
 <style>
 :root {
@@ -613,7 +613,7 @@ input, button, .poppins,
 .intro-si {
   position:absolute; left:50%; top:40%;
   width:36px; height:36px; background:var(--white);
-  border-radius:10px; border:1px solid var(--border);
+  border-radius:50%; border:1px solid var(--border);
   display:flex; align-items:center; justify-content:center;
   transform:translate(-50%,-50%) scale(0); opacity:0;
   z-index:12; pointer-events:none; box-shadow:0 2px 8px rgba(0,0,0,.08);
@@ -626,16 +626,16 @@ input, button, .poppins,
   text-align:center; z-index:8; pointer-events:none;
   white-space:nowrap; will-change:transform,opacity;
 }
-.intro-wm { font-family:'Kenia',sans-serif; font-size:36px; color:var(--ink); letter-spacing:0.05em; }
+.intro-wm { font-family:'Fugaz One',sans-serif; font-size:36px; color:var(--ink); letter-spacing:0.05em; }
 .intro-tag { font-family:'Poppins',sans-serif; font-size:13px; font-style:italic; font-weight:300; color:var(--ink3); margin-top:12px; letter-spacing:.07em; }
 /* login (stage 6) */
 #introLogin {
-  position:absolute; top:65%; left:50%;
+  position:absolute; bottom:140px; left:50%;
   width:calc(100% - 80px); max-width:350px;
   transform:translateX(-50%) translateY(20px); opacity:0;
   z-index:20; pointer-events:none;
 }
-.google-signin-btn { width:100%; padding:16px 20px; background:transparent; border:1px solid rgba(42,37,32,.2); border-radius:var(--radius-lg); display:flex; align-items:center; justify-content:center; gap:14px; font-family:'Poppins',sans-serif; font-size:14px; font-weight:400; letter-spacing:.04em; color:var(--ink2); cursor:pointer; transition:all .2s; box-shadow:none; }
+.google-signin-btn { width:100%; padding:16px 20px; background:transparent; border:1px solid rgba(42,37,32,.2); border-radius:999px; display:flex; align-items:center; justify-content:center; gap:14px; font-family:'Poppins',sans-serif; font-size:14px; font-weight:400; letter-spacing:.04em; color:var(--ink2); cursor:pointer; transition:all .2s; box-shadow:none; }
 .google-signin-btn:hover { background:#E59A2D; color:white; border-color:#E59A2D; }
 .google-signin-btn:hover svg { filter:brightness(0) invert(1); }
 .google-signin-btn:active { transform:scale(.98); background:rgba(42,37,32,.04); }
