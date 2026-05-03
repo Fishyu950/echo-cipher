@@ -84,7 +84,8 @@ input, button, .poppins,
 .detail-platform, .detail-block-value, .detail-hint-value,
 .tab-btn, .btn-primary, .btn-save, .btn-edit-detail,
 .field-label, .edit-field-label, .form-card-title,
-.delete-btn, .detail-block-label, .detail-cat-badge {
+.delete-btn, .detail-block-label, .detail-cat-badge,
+.profile-row-label, .profile-meta, .profile-username {
   font-family: 'Poppins', 'Noto Sans TC', sans-serif;
 }
 
@@ -210,7 +211,8 @@ input, button, .poppins,
 .section-title { font-size: 17px; font-weight: 700; color: var(--ink); }
 .list-count { font-size: 13px; color: var(--primary-dark); font-weight: 500; }
 
-.cat-scroll { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; -webkit-overflow-scrolling: touch; touch-action: pan-x; }
+.cat-scroll { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; -webkit-overflow-scrolling: touch; touch-action: pan-x; cursor: grab; user-select: none; }
+.cat-scroll.dragging { cursor: grabbing; }
 .cat-scroll::-webkit-scrollbar { display: none; }
 
 .cat-chip {
@@ -824,7 +826,7 @@ input, button, .poppins,
 <!-- ════ MAIN ════ -->
 <div id="mainScreen" class="screen">
   <div class="main-header">
-    <div class="header-name" id="greetingName">使用者</div>
+    <div class="header-name" id="greetingName" onclick="editNickname()" style="cursor:pointer">使用者</div>
     <div class="avatar-btn" id="userAvatar" onclick="showProfile()">U</div>
   </div>
   <div class="search-section">
@@ -940,9 +942,28 @@ input, button, .poppins,
       <div class="profile-meta" id="profileMeta">尚未同步至雲端</div>
     </div>
     <div class="profile-card">
+      <div class="profile-row" onclick="editNickname()">
+        <div class="profile-row-icon"><span class="mi">badge</span></div>
+        <div class="profile-row-label">暱稱：<span id="profileNickname" style="font-weight:600;color:var(--ink)">--</span></div>
+        <div class="profile-row-arrow"><span class="mi">edit</span></div>
+      </div>
+    </div>
+    <div class="profile-card">
       <div class="profile-row" onclick="manualSync()">
         <div class="profile-row-icon"><span class="mi">sync</span></div>
         <div class="profile-row-label">立即同步 Google Sheets</div>
+        <div class="profile-row-arrow"><span class="mi">chevron_right</span></div>
+      </div>
+    </div>
+    <div class="profile-card">
+      <div class="profile-row" onclick="exportData()">
+        <div class="profile-row-icon"><span class="mi">download</span></div>
+        <div class="profile-row-label">匯出資料</div>
+        <div class="profile-row-arrow"><span class="mi">chevron_right</span></div>
+      </div>
+      <div class="profile-row" onclick="importData()">
+        <div class="profile-row-icon"><span class="mi">upload</span></div>
+        <div class="profile-row-label">匯入資料</div>
         <div class="profile-row-arrow"><span class="mi">chevron_right</span></div>
       </div>
     </div>
@@ -992,9 +1013,9 @@ const CATS = [
 const EMOJIS = ['🔑','💳','📧','🛒','💼','🎮','🏦','📱','🌐','🔒','⭐','🎵','📷','🚀','💡','🎯'];
 const PER_PAGE = 10;
 const DATA_PFX = 'echo_data_';
-const PIN_KEY = 'echo_pin_', USER_KEY = 'echo_current_user', SHEET_ID_KEY = 'echo_sheet_';
+const PIN_KEY = 'echo_pin_', USER_KEY = 'echo_current_user', SHEET_ID_KEY = 'echo_sheet_', NICK_KEY = 'echo_nick_';
 const SHEET_NAME = 'EchoData';
-const SHEET_COLS = ['ID','平台','帳號','暗號','備註','分類','圖示','建立時間'];
+const SHEET_COLS = ['平台','帳號','暗號','備註','分類','建立時間'];
 
 // ── STATE ──
 let currentUser=null, entries=[], editingId=null, detailId=null;
@@ -1043,12 +1064,89 @@ function switchNav(tab){
   }
 }
 
+function getNick(){
+  if(!currentUser) return 'U';
+  const def = currentUser.includes('@') ? currentUser.split('@')[0] : currentUser;
+  return localStorage.getItem(NICK_KEY + currentUser) || def;
+}
+
 function showProfile(){
-  document.getElementById('profileAvatarBig').textContent = currentUser ? currentUser[0].toUpperCase() : 'U';
+  const nick = getNick();
+  document.getElementById('profileAvatarBig').textContent = nick[0].toUpperCase();
   document.getElementById('profileUsername').textContent = currentUser || '使用者';
+  document.getElementById('profileNickname').textContent = nick;
   const sheetId = currentUser ? localStorage.getItem(SHEET_ID_KEY + currentUser) : null;
   document.getElementById('profileMeta').textContent = sheetId ? '已連結 Google Sheets' : '尚未同步至雲端';
   showScreen('profileScreen');
+}
+
+function editNickname(){
+  if(!currentUser) return;
+  const def = currentUser.includes('@') ? currentUser.split('@')[0] : currentUser;
+  const current = localStorage.getItem(NICK_KEY + currentUser) || def;
+  const val = prompt('編輯暱稱', current);
+  if(val === null) return;
+  const nick = val.trim() || def;
+  localStorage.setItem(NICK_KEY + currentUser, nick);
+  document.getElementById('greetingName').textContent = 'Hi, ' + nick;
+  document.getElementById('userAvatar').textContent = nick[0].toUpperCase();
+  const pn = document.getElementById('profileNickname');
+  if(pn) pn.textContent = nick;
+  document.getElementById('profileAvatarBig').textContent = nick[0].toUpperCase();
+}
+
+function exportData(){
+  const date = new Date().toISOString().split('T')[0];
+  const blob = new Blob([JSON.stringify(entries, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `Echo_備份_${date}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function importData(){
+  if(!confirm('匯入將會合併現有資料，是否繼續？')) return;
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json,application/json';
+  input.onchange = e => {
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const imported = JSON.parse(ev.target.result);
+        if(!Array.isArray(imported)) throw new Error('invalid');
+        const existingIds = new Set(entries.map(e => e.id));
+        const added = imported.filter(e => e.id && e.platform && !existingIds.has(e.id));
+        entries = [...added, ...entries];
+        saveUserData(currentUser, entries);
+        renderList();
+        showToast(`已匯入 ${added.length} 筆資料`, 'success');
+        syncToSheetsBackground();
+      } catch { showToast('檔案格式錯誤', 'error'); }
+    };
+    reader.readAsText(file);
+  };
+  input.click();
+}
+
+function initCatScrollDrag(){
+  const el = document.getElementById('catScroll');
+  let isDown = false, startX, scrollLeft;
+  el.addEventListener('mousedown', e => {
+    isDown = true; el.classList.add('dragging');
+    startX = e.pageX - el.offsetLeft; scrollLeft = el.scrollLeft;
+    e.preventDefault();
+  });
+  el.addEventListener('mouseleave', () => { isDown = false; el.classList.remove('dragging'); });
+  el.addEventListener('mouseup', () => { isDown = false; el.classList.remove('dragging'); });
+  el.addEventListener('mousemove', e => {
+    if(!isDown) return;
+    e.preventDefault();
+    el.scrollLeft = scrollLeft - (e.pageX - el.offsetLeft - startX);
+  });
 }
 
 // ── GOOGLE AUTH ──
@@ -1056,21 +1154,30 @@ function initGoogleAuth(){
   if(typeof google === 'undefined' || !google.accounts){ setTimeout(initGoogleAuth, 200); return; }
   googleTokenClient = google.accounts.oauth2.initTokenClient({
     client_id: GOOGLE_CLIENT_ID,
-    scope: 'https://www.googleapis.com/auth/spreadsheets email profile',
+    scope: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.metadata.readonly email profile',
     callback: ()=>{},
   });
 }
 
-function requestToken(prompt=''){
+function requestToken(promptVal=''){
   return new Promise((resolve, reject)=>{
     if(!googleTokenClient){ reject(new Error('GSI not ready')); return; }
-    googleTokenClient.callback = (resp)=>{
+    let escalated = false;
+    const handler = (resp)=>{
       if(resp.error){ reject(new Error(resp.error)); return; }
+      // If drive.file scope is missing (existing user before scope change), force re-consent once
+      if(resp.scope && !resp.scope.includes('drive.file') && !escalated){
+        escalated = true;
+        googleTokenClient.callback = handler;
+        googleTokenClient.requestAccessToken({ prompt: 'consent' });
+        return;
+      }
       accessToken = resp.access_token;
       tokenExpiry = Date.now() + (resp.expires_in - 60) * 1000;
       resolve(accessToken);
     };
-    googleTokenClient.requestAccessToken({ prompt });
+    googleTokenClient.callback = handler;
+    googleTokenClient.requestAccessToken({ prompt: promptVal });
   });
 }
 
@@ -1217,6 +1324,39 @@ function doLogout(){
 }
 
 // ── GOOGLE SHEETS API ──
+
+// Search Drive for an existing "Echo 暗號本" spreadsheet (prevents duplicates)
+async function findExistingSheet(token){
+  const q = "name='Echo 暗號本' and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false";
+  const resp = await fetch(
+    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id)&pageSize=1`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if(!resp.ok) return null;
+  const data = await resp.json();
+  return (data.files && data.files[0]) ? data.files[0].id : null;
+}
+
+// Resolve sheet ID: localStorage → verify → Drive search → create
+async function ensureSheet(token){
+  let sheetId = currentUser ? localStorage.getItem(SHEET_ID_KEY + currentUser) : null;
+  if(sheetId){
+    const check = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}?fields=spreadsheetId`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if(!check.ok){ localStorage.removeItem(SHEET_ID_KEY + currentUser); sheetId = null; }
+  }
+  if(!sheetId){
+    sheetId = await findExistingSheet(token);
+    if(sheetId) localStorage.setItem(SHEET_ID_KEY + currentUser, sheetId);
+  }
+  if(!sheetId){
+    sheetId = await createSpreadsheet(token);
+  }
+  return sheetId;
+}
+
 async function createSpreadsheet(token){
   const resp = await fetch('https://sheets.googleapis.com/v4/spreadsheets', {
     method: 'POST',
@@ -1234,7 +1374,6 @@ async function createSpreadsheet(token){
 }
 
 async function writeSheet(sheetId, token, rows){
-  // Clear first so deleted rows don't linger in the sheet
   await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(SHEET_NAME)}:clear`,
     { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: '{}' }
@@ -1250,33 +1389,58 @@ async function writeSheet(sheetId, token, rows){
   if(!resp.ok) throw new Error('write:'+resp.status);
 }
 
-async function loadFromSheets(email){
-  const sheetId = localStorage.getItem(SHEET_ID_KEY + email);
-  if(!sheetId) return null;
-  const token = await ensureToken();
-  const resp = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${SHEET_NAME}!A:H`,
-    { headers: { Authorization: `Bearer ${token}` } }
-  );
-  if(resp.status === 404){ localStorage.removeItem(SHEET_ID_KEY + email); return null; }
-  if(!resp.ok) throw new Error('read:'+resp.status);
-  const data = await resp.json();
-  return (data.values||[]).slice(1)
-    .filter(r => r[1])
-    .map(r => ({
+// Parse sheet rows — handles both old 8-column format (ID first) and new 6-column format
+function parseSheetRows(allRows){
+  if(!allRows || allRows.length < 2) return [];
+  const isOld = allRows[0][0] === 'ID';
+  return allRows.slice(1)
+    .filter(r => r[isOld ? 1 : 0])
+    .map(r => isOld ? {
       id: r[0]||uid(), platform: r[1]||'', account: r[2]||'',
       hint: r[3]||'', note: r[4]||'', category: r[5]||'其他',
-      emoji: r[6]||'🔑', createdAt: r[7]||new Date().toISOString(),
-    }));
+      emoji: r[6]||'🔑', createdAt: r[7]||new Date().toISOString()
+    } : {
+      id: uid(), platform: r[0]||'', account: r[1]||'',
+      hint: r[2]||'', note: r[3]||'', category: r[4]||'其他',
+      emoji: '🔑', createdAt: r[5]||new Date().toISOString()
+    });
+}
+
+async function loadFromSheets(email){
+  const token = await ensureToken();
+  let sheetId = localStorage.getItem(SHEET_ID_KEY + email);
+
+  // Helper to fetch rows from a known sheet ID
+  async function fetchRows(id){
+    const resp = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${SHEET_NAME}!A:H`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if(resp.status === 404){ localStorage.removeItem(SHEET_ID_KEY + email); return 'not_found'; }
+    if(!resp.ok) throw new Error('read:'+resp.status);
+    return (await resp.json()).values || [];
+  }
+
+  if(sheetId){
+    const rows = await fetchRows(sheetId);
+    if(rows !== 'not_found') return parseSheetRows(rows);
+    // 404 — fall through to Drive search below
+    sheetId = null;
+  }
+
+  // Drive search: maybe the file still exists with a different ID
+  sheetId = await findExistingSheet(token);
+  if(!sheetId) return null;
+  localStorage.setItem(SHEET_ID_KEY + email, sheetId);
+  const rows = await fetchRows(sheetId);
+  return rows === 'not_found' ? null : parseSheetRows(rows);
 }
 
 async function saveToSheets(email, data){
   const token = await ensureToken();
-  let sheetId = localStorage.getItem(SHEET_ID_KEY + email);
-  if(!sheetId) sheetId = await createSpreadsheet(token);
+  const sheetId = await ensureSheet(token);
   const rows = [SHEET_COLS, ...data.map(e=>[
-    e.id, e.platform, e.account, e.hint||'', e.note||'',
-    e.category||'其他', e.emoji||'🔑', e.createdAt
+    e.platform, e.account, e.hint||'', e.note||'', e.category||'其他', e.createdAt
   ])];
   await writeSheet(sheetId, token, rows);
 }
@@ -1518,9 +1682,10 @@ function deleteEntry(){
 function loginSuccess(user){
   currentUser=user;
   entries=getUserData(user);
-  const display = user.includes('@') ? user.split('@')[0] : user;
-  document.getElementById('greetingName').textContent=display;
-  document.getElementById('userAvatar').textContent=display[0].toUpperCase();
+  const defaultNick = user.includes('@') ? user.split('@')[0] : user;
+  const nick = localStorage.getItem(NICK_KEY + user) || defaultNick;
+  document.getElementById('greetingName').textContent = 'Hi, ' + nick;
+  document.getElementById('userAvatar').textContent = nick[0].toUpperCase();
   activeCatFilter='全部'; currentPage=1;
   buildCatFilter(); renderList();
   showScreen('mainScreen');
@@ -1607,6 +1772,7 @@ function runIntroAnimation(){
 // ── STARTUP ──
 (function(){
   initGoogleAuth();
+  initCatScrollDrag();
   const savedUser = localStorage.getItem(USER_KEY);
   if(savedUser){
     pendingUser = savedUser;
