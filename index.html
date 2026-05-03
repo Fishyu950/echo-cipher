@@ -316,6 +316,24 @@ input, button, .poppins,
 .nav-fab:active { transform: scale(0.92); }
 .nav-fab .mi { color: white; font-size: 26px; }
 
+/* Scroll-to-top button */
+.scroll-top-wrap {
+  position: fixed; bottom: 82px; left: 50%; transform: translateX(-50%);
+  width: 100%; max-width: 430px; pointer-events: none; z-index: 19;
+}
+.scroll-top-btn {
+  position: absolute; right: 16px; bottom: 0;
+  width: 40px; height: 40px; border-radius: 50%;
+  background: var(--primary); border: none;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 4px 14px rgba(245,166,35,0.45);
+  cursor: pointer; pointer-events: none;
+  opacity: 0; transition: opacity 0.25s;
+}
+.scroll-top-btn.visible { opacity: 1; pointer-events: auto; }
+.scroll-top-btn:active { transform: scale(0.9); }
+.scroll-top-btn .mi { color: white; font-size: 22px; }
+
 .empty-state { text-align: center; padding: 60px 20px; }
 .empty-icon-wrap {
   width: 80px; height: 80px; background: var(--primary-bg); border-radius: 50%;
@@ -875,6 +893,11 @@ input, button, .poppins,
   </div>
   <div class="list-section" id="listArea"></div>
   <div id="paginationArea"></div>
+  <div class="scroll-top-wrap">
+    <button class="scroll-top-btn" id="scrollTopBtn" onclick="scrollToTop()" aria-label="回到頂部">
+      <span class="mi">keyboard_arrow_up</span>
+    </button>
+  </div>
   <div class="bottom-nav">
     <div class="nav-item active" id="navHome" onclick="switchNav('home')">
       <span class="mi">home</span><span>主頁</span>
@@ -986,28 +1009,24 @@ input, button, .poppins,
         </button>
       </div>
     </div>
-    <!-- 3. 暱稱設定（行內編輯） -->
+    <!-- 3+4+5. 暱稱 / 同步 / 登出 合併卡片 -->
     <div class="profile-card">
       <div class="profile-row" style="cursor:default">
         <div class="profile-row-icon"><span class="mi">badge</span></div>
         <div class="profile-row-label" id="nickDisplay">
-          暱稱：<span id="profileNickname" style="font-weight:600;color:var(--ink)">--</span>
+          暱稱：<span id="profileNickname" style="font-weight:600;color:var(--ink)">--</span><input id="nickInput" class="nick-input-inline" style="display:none"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();finishNickEdit(this.value)}"
+            onblur="finishNickEdit(this.value)">
         </div>
         <div class="profile-row-arrow" id="nickEditBtn" onclick="startNickEdit()" style="cursor:pointer;padding:4px">
           <span class="mi">edit</span>
         </div>
       </div>
-    </div>
-    <!-- 4. 立即同步 -->
-    <div class="profile-card">
       <div class="profile-row" onclick="manualSync()">
         <div class="profile-row-icon"><span class="mi">sync</span></div>
         <div class="profile-row-label">立即同步 Google Sheets</div>
         <div class="profile-row-arrow"><span class="mi">chevron_right</span></div>
       </div>
-    </div>
-    <!-- 5. 登出 -->
-    <div class="profile-card">
       <div class="profile-row logout-row" onclick="doLogout()">
         <div class="profile-row-icon"><span class="mi">logout</span></div>
         <div class="profile-row-label">登出</div>
@@ -1113,29 +1132,34 @@ function getNick(){
 
 function resetNickDisplay(){
   const nick = getNick();
-  const display = document.getElementById('nickDisplay');
+  const nameSpan = document.getElementById('profileNickname');
+  const input = document.getElementById('nickInput');
   const btn = document.getElementById('nickEditBtn');
-  if(!display || !btn) return;
-  display.innerHTML = `暱稱：<span id="profileNickname" style="font-weight:600;color:var(--ink)">${nick}</span>`;
+  if(!nameSpan || !btn) return;
+  nameSpan.textContent = nick;
+  nameSpan.style.display = '';
+  if(input) input.style.display = 'none';
   btn.innerHTML = '<span class="mi">edit</span>';
   btn.onclick = startNickEdit;
 }
 
 function startNickEdit(){
   if(!currentUser) return;
-  const nick = getNick();
-  const display = document.getElementById('nickDisplay');
+  const nameSpan = document.getElementById('profileNickname');
+  const input = document.getElementById('nickInput');
   const btn = document.getElementById('nickEditBtn');
-  display.innerHTML = `暱稱：<input id="nickInput" class="nick-input-inline" value="${nick}"
-    onkeydown="if(event.key==='Enter'){event.preventDefault();finishNickEdit(this.value)}"
-    onblur="finishNickEdit(this.value)">`;
+  if(!nameSpan || !input || !btn) return;
+  input.value = getNick();
+  nameSpan.style.display = 'none';
+  input.style.display = '';
+  input.focus();
   btn.innerHTML = '<span class="mi" style="color:var(--primary)">check</span>';
-  btn.onclick = () => { const inp = document.getElementById('nickInput'); if(inp) finishNickEdit(inp.value); };
-  setTimeout(() => { const inp = document.getElementById('nickInput'); if(inp) inp.focus(); }, 30);
+  btn.onclick = () => finishNickEdit(input.value);
 }
 
 function finishNickEdit(val){
-  if(!document.getElementById('nickInput')) return; // guard against double-fire
+  const input = document.getElementById('nickInput');
+  if(!input || input.style.display === 'none') return; // guard against double-fire
   const def = currentUser.includes('@') ? currentUser.split('@')[0] : currentUser;
   const nick = val.trim() || def;
   resetNickDisplay();
@@ -1191,6 +1215,18 @@ function importData(){
     reader.readAsText(file);
   };
   input.click();
+}
+
+function scrollToTop(){
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function initScrollTop(){
+  window.addEventListener('scroll', () => {
+    const btn = document.getElementById('scrollTopBtn');
+    if(!btn) return;
+    btn.classList.toggle('visible', window.scrollY > 300);
+  }, { passive: true });
 }
 
 function initCatScrollDrag(){
@@ -1267,6 +1303,7 @@ async function googleLogin(){
     if(!info.email) throw new Error('no email');
     const email = info.email;
     if(info.picture) localStorage.setItem(AVATAR_KEY + email, info.picture);
+    ensureSheet(token).then(id => console.log('[Echo] googleLogin: sheet ready:', id)).catch(e => console.warn('[Echo] googleLogin: sheet init error:', e));
     pendingUser = email;
     ['setPinUserName','confirmPinUserName','enterPinUserName'].forEach(id=>{
       document.getElementById(id).textContent = email;
@@ -1395,49 +1432,79 @@ function doLogout(){
 // Search Drive for an existing "Echo 暗號本" spreadsheet (prevents duplicates)
 async function findExistingSheet(token){
   const q = "name='Echo 暗號本' and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false";
-  const resp = await fetch(
-    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id)&pageSize=1`,
-    { headers: { Authorization: `Bearer ${token}` } }
-  );
-  if(!resp.ok) return null;
+  const url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)&pageSize=5`;
+  console.log('[Echo] findExistingSheet: GET', url);
+  console.log('[Echo] findExistingSheet: query =', q);
+  const resp = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  console.log('[Echo] findExistingSheet: HTTP', resp.status, resp.statusText);
   const data = await resp.json();
-  return (data.files && data.files[0]) ? data.files[0].id : null;
+  console.log('[Echo] findExistingSheet: response body =', JSON.stringify(data, null, 2));
+  if(!resp.ok){
+    console.warn('[Echo] findExistingSheet: Drive search FAILED — error:', data.error);
+    return null;
+  }
+  const found = (data.files && data.files[0]) ? data.files[0].id : null;
+  console.log('[Echo] findExistingSheet: files found =', data.files ? data.files.length : 0, '→ using id =', found);
+  return found;
 }
 
 // Resolve sheet ID: localStorage → verify → Drive search → create
 async function ensureSheet(token){
   let sheetId = currentUser ? localStorage.getItem(SHEET_ID_KEY + currentUser) : null;
+  console.log('[Echo] ensureSheet: START — currentUser =', currentUser, '| cached sheetId =', sheetId);
+
   if(sheetId){
-    const check = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}?fields=spreadsheetId`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    if(!check.ok){ localStorage.removeItem(SHEET_ID_KEY + currentUser); sheetId = null; }
+    const verifyUrl = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}?fields=spreadsheetId,properties/title`;
+    console.log('[Echo] ensureSheet: verifying cached sheet — GET', verifyUrl);
+    const check = await fetch(verifyUrl, { headers: { Authorization: `Bearer ${token}` } });
+    console.log('[Echo] ensureSheet: verify HTTP', check.status, check.statusText);
+    const checkBody = await check.json();
+    console.log('[Echo] ensureSheet: verify response body =', JSON.stringify(checkBody, null, 2));
+    if(!check.ok){
+      console.warn('[Echo] ensureSheet: cached sheet INVALID (', check.status, '), clearing localStorage');
+      localStorage.removeItem(SHEET_ID_KEY + currentUser);
+      sheetId = null;
+    }
   }
+
   if(!sheetId){
+    console.log('[Echo] ensureSheet: no valid cached id — searching Drive...');
     sheetId = await findExistingSheet(token);
-    if(sheetId) localStorage.setItem(SHEET_ID_KEY + currentUser, sheetId);
+    if(sheetId){
+      localStorage.setItem(SHEET_ID_KEY + currentUser, sheetId);
+      console.log('[Echo] ensureSheet: Drive search found sheet, saved to localStorage:', sheetId);
+    }
   }
+
   if(!sheetId){
+    console.log('[Echo] ensureSheet: no sheet found anywhere — creating new spreadsheet...');
     sheetId = await createSpreadsheet(token);
   }
+
+  console.log('[Echo] ensureSheet: DONE — resolved sheetId =', sheetId);
   return sheetId;
 }
 
 async function createSpreadsheet(token){
+  const reqBody = {
+    properties: { title: 'Echo 暗號本' },
+    sheets: [
+      { properties: { title: SHEET_NAME } },
+      { properties: { title: SETTINGS_SHEET } }
+    ]
+  };
+  console.log('[Echo] createSpreadsheet: POST https://sheets.googleapis.com/v4/spreadsheets');
+  console.log('[Echo] createSpreadsheet: request body =', JSON.stringify(reqBody, null, 2));
   const resp = await fetch('https://sheets.googleapis.com/v4/spreadsheets', {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      properties: { title: 'Echo 暗號本' },
-      sheets: [
-        { properties: { title: SHEET_NAME } },
-        { properties: { title: SETTINGS_SHEET } }
-      ]
-    })
+    body: JSON.stringify(reqBody)
   });
-  if(!resp.ok) throw new Error('create:'+resp.status);
+  console.log('[Echo] createSpreadsheet: HTTP', resp.status, resp.statusText);
   const data = await resp.json();
+  console.log('[Echo] createSpreadsheet: response body =', JSON.stringify(data, null, 2));
+  if(!resp.ok) throw new Error('create:' + resp.status + ' ' + JSON.stringify(data.error));
+  console.log('[Echo] createSpreadsheet: SUCCESS — id =', data.spreadsheetId);
   localStorage.setItem(SHEET_ID_KEY + currentUser, data.spreadsheetId);
   await writeSheet(data.spreadsheetId, token, [SHEET_COLS]);
   return data.spreadsheetId;
@@ -1619,34 +1686,47 @@ async function syncFromSheetsBackground(){
   } catch(e){ /* silent */ }
 }
 
+async function doSync(){
+  // Use cached token first; fall back to silent refresh (prompt:'') — never show account picker
+  const token = await ensureToken();
+  console.log('[Echo] doSync: token acquired, expires in',
+    Math.round((tokenExpiry - Date.now()) / 1000), 's');
+
+  const sheetId = await ensureSheet(token);
+  console.log('[Echo] doSync: sheetId =', sheetId);
+
+  const sheetEntries = await loadFromSheets(currentUser);
+  console.log('[Echo] doSync: loaded', sheetEntries ? sheetEntries.length : 'null', 'entries from Sheets');
+  if(sheetEntries !== null){
+    entries = sheetEntries;
+    saveUserData(currentUser, entries);
+    renderList();
+  }
+
+  await saveToSheets(currentUser, entries);
+  console.log('[Echo] doSync: saved', entries.length, 'entries to Sheets');
+
+  const remoteNick = await loadNickFromSheets(sheetId, token);
+  if(remoteNick){
+    const def = currentUser.includes('@') ? currentUser.split('@')[0] : currentUser;
+    if(remoteNick !== (localStorage.getItem(NICK_KEY + currentUser) || def)) applyNick(remoteNick);
+  } else {
+    await saveNickToSheets(getNick());
+  }
+}
+
 async function manualSync(){
   showSyncOverlay(true, '正在同步資料…');
+  const timeoutPromise = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error('同步逾時（15 秒），請確認網路並重試')), 15000)
+  );
   try {
-    let token;
-    try { token = await requestToken(''); }
-    catch { token = await requestToken('select_account'); }
-    const sheetEntries = await loadFromSheets(currentUser);
-    if(sheetEntries !== null){
-      entries = sheetEntries;
-      saveUserData(currentUser, entries);
-      renderList();
-    }
-    await saveToSheets(currentUser, entries);
-    // Sync nickname: pull remote first, then push local if no remote value
-    const sheetId = localStorage.getItem(SHEET_ID_KEY + currentUser);
-    if(sheetId){
-      const remoteNick = await loadNickFromSheets(sheetId, token);
-      if(remoteNick){
-        const def = currentUser.includes('@') ? currentUser.split('@')[0] : currentUser;
-        if(remoteNick !== (localStorage.getItem(NICK_KEY + currentUser)||def)) applyNick(remoteNick);
-      } else {
-        await saveNickToSheets(getNick());
-      }
-    }
+    await Promise.race([doSync(), timeoutPromise]);
     showToast('同步完成', 'success');
     document.getElementById('profileMeta').textContent = '已連結 Google Sheets';
   } catch(e){
-    showToast('同步失敗，請重新登入', 'error');
+    console.error('[Echo] manualSync error:', e);
+    showToast(e.message || '同步失敗', 'error');
   } finally {
     showSyncOverlay(false);
   }
@@ -1986,6 +2066,7 @@ function runIntroAnimation(){
 (function(){
   initGoogleAuth();
   initCatScrollDrag();
+  initScrollTop();
   const savedUser = localStorage.getItem(USER_KEY);
   if(savedUser){
     // Show welcome screen in final state with "已連結 Google" indicator
