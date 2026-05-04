@@ -1083,7 +1083,7 @@ input, button, .poppins,
         <div class="profile-row-arrow"><span class="mi">chevron_right</span></div>
       </div>
     </div>
-    <div class="profile-version">Echo v1.0.7 build 20260504</div>
+    <div class="profile-version">Echo v1.0.8 build 20260504</div>
   </div>
   <div class="bottom-nav">
     <div class="nav-item" id="navHome2" onclick="switchNav('home')">
@@ -1618,22 +1618,28 @@ async function ensureSheet(token){
     localStorage.setItem(SHEET_ID_KEY + currentUser, sheetId);
   }
 
-  // Step 2: Drive came up empty — verify locally cached ID as fallback
+  // Step 2: Drive came up empty — verify locally cached ID via Drive API (checks trashed status too)
   if(!sheetId && currentUser){
     const cached = localStorage.getItem(SHEET_ID_KEY + currentUser);
     if(cached){
-      console.log('[Echo] ensureSheet: Drive search empty, verifying cached id:', cached);
+      console.log('[Echo] ensureSheet: Drive search empty, verifying cached id via Drive API:', cached);
       const check = await fetch(
-        'https://sheets.googleapis.com/v4/spreadsheets/' + cached + '?fields=spreadsheetId',
+        'https://www.googleapis.com/drive/v3/files/' + cached + '?fields=id,trashed',
         { headers: { Authorization: 'Bearer ' + token } }
       );
       console.log('[Echo] ensureSheet: verify cached HTTP', check.status);
       if(check.ok){
-        sheetId = cached;
-        console.log('[Echo] ensureSheet: using cached id (file may not be in Drive root):', sheetId);
+        const checkData = await check.json();
+        if(checkData.trashed){
+          localStorage.removeItem(SHEET_ID_KEY + currentUser);
+          console.log('[Echo] ensureSheet: cached id is in TRASH — clearing, will create new sheet');
+        } else {
+          sheetId = cached;
+          console.log('[Echo] ensureSheet: cached id confirmed in Drive (not trashed):', sheetId);
+        }
       } else {
         localStorage.removeItem(SHEET_ID_KEY + currentUser);
-        console.log('[Echo] ensureSheet: cached id invalid, cleared');
+        console.log('[Echo] ensureSheet: cached id invalid (HTTP', check.status, ') — cleared');
       }
     }
   }
@@ -1938,12 +1944,24 @@ async function syncFromSheetsBackground(){
   try {
     // Pass pre-validated token — never call ensureToken() or requestToken() from background path
     const sheetEntries = await loadFromSheets(currentUser, token);
-    if(sheetEntries !== null && sheetEntries.length > 0){
-      entries = sheetEntries;
-      saveUserData(currentUser, entries);
-      renderList();
-    } else if(sheetEntries !== null && sheetEntries.length === 0 && entries.length > 0){
-      await saveToSheets(currentUser, entries, token);
+    if(sheetEntries !== null){
+      const localCount = entries.length;
+      const sheetsCount = sheetEntries.length;
+      console.log('[Echo] syncFromSheets: local =', localCount, '| Sheets =', sheetsCount);
+      if(localCount > sheetsCount){
+        // Local has more entries — local wins, upload to Sheets
+        console.log('[Echo] syncFromSheets: local wins (more entries) → uploading to Sheets');
+        await saveToSheets(currentUser, entries, token);
+      } else if(sheetsCount > 0){
+        // Sheets has more, or equal count (cloud priority) — Sheets wins, download to local
+        console.log('[Echo] syncFromSheets: Sheets wins (', sheetsCount >= localCount ? 'same count or more' : '', ') → downloading to local');
+        entries = sheetEntries;
+        saveUserData(currentUser, entries);
+        renderList();
+      } else {
+        // Both empty — no action needed
+        console.log('[Echo] syncFromSheets: both empty — no action');
+      }
     }
     // Pull nickname from 設定 sheet
     const sheetId = localStorage.getItem(SHEET_ID_KEY + currentUser);
@@ -1978,15 +1996,25 @@ async function doSync(){
     console.log('[Echo] doSync: upload complete');
     await saveNickToSheets(getNick());
   } else {
-    // Existing sheet — Sheets is source of truth
+    // Existing sheet — count-based conflict resolution
     const sheetEntries = await loadFromSheets(currentUser);
-    console.log('[Echo] doSync: loaded', sheetEntries ? sheetEntries.length : 'null', 'entries from Sheets');
-    if(sheetEntries !== null && sheetEntries.length > 0){
-      entries = sheetEntries;
-      saveUserData(currentUser, entries);
-      renderList();
-    } else if(sheetEntries !== null && sheetEntries.length === 0){
-      console.log('[Echo] doSync: Sheets empty — keeping local data, uploading to Sheets');
+    const localCount = entries.length;
+    const sheetsCount = sheetEntries !== null ? sheetEntries.length : null;
+    console.log('[Echo] doSync: local =', localCount, '| Sheets =', sheetsCount !== null ? sheetsCount : 'read failed');
+    if(sheetEntries !== null){
+      if(localCount > sheetsCount){
+        // Local has more entries — local wins, will upload below
+        console.log('[Echo] doSync: local wins (more entries) → uploading to Sheets');
+      } else if(sheetsCount > 0){
+        // Sheets has more, or equal count (cloud priority) — Sheets wins
+        console.log('[Echo] doSync: Sheets wins (', sheetsCount > localCount ? 'more entries' : 'same count, cloud priority', ') → downloading to local');
+        entries = sheetEntries;
+        saveUserData(currentUser, entries);
+        renderList();
+      } else {
+        // Sheets empty — keep local data, will upload below
+        console.log('[Echo] doSync: Sheets empty — keeping local data');
+      }
     }
     await saveToSheets(currentUser, entries);
     console.log('[Echo] doSync: saved', entries.length, 'entries to Sheets');
