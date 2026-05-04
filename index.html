@@ -258,6 +258,16 @@ input, button, .poppins,
   font-size: 11px; font-weight: 600;
 }
 
+/* URL row */
+.entry-url-row {
+  display: flex; align-items: flex-start; gap: 8px; margin-bottom: 8px;
+}
+.entry-url-row .mi { color: var(--ink4); font-size: 14px; flex-shrink: 0; margin-top: 1px; }
+.entry-url-text {
+  font-size: 11px; color: var(--ink4); word-break: break-all; line-height: 1.5;
+  font-family: 'Poppins', 'Noto Sans TC', sans-serif;
+}
+
 /* Hint row — warm olive */
 .entry-hint-row {
   display: flex; align-items: center; gap: 8px;
@@ -1941,6 +1951,7 @@ function renderList(){
         </div>
         <div class="entry-badge" style="background:${cat.bg};color:${cat.color}">${esc(e.category||'其他')}</div>
       </div>
+      ${e.url?`<div class="entry-url-row"><span class="mi">language</span><div class="entry-url-text">${esc(e.url)}</div></div>`:''}
       ${e.hint?`<div class="entry-hint-row"><span class="mi">visibility_off</span><div class="entry-hint-text">${esc(e.hint)}</div></div>`:''}
     </div>`;
   }).join('');
