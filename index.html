@@ -1083,7 +1083,7 @@ input, button, .poppins,
         <div class="profile-row-arrow"><span class="mi">chevron_right</span></div>
       </div>
     </div>
-    <div class="profile-version">Echo v1.0.8 build 20260504</div>
+    <div class="profile-version">Echo v1.0.9 build 20260504</div>
   </div>
   <div class="bottom-nav">
     <div class="nav-item" id="navHome2" onclick="switchNav('home')">
@@ -1125,6 +1125,7 @@ const EMOJIS = ['🔑','💳','📧','🛒','💼','🎮','🏦','📱','🌐','
 const PER_PAGE = 10;
 const DATA_PFX = 'echo_data_';
 const PIN_KEY = 'echo_pin_', USER_KEY = 'echo_current_user', SHEET_ID_KEY = 'echo_sheet_', NICK_KEY = 'echo_nick_', AVATAR_KEY = 'echo_avatar_';
+const TOKEN_STORAGE_KEY = 'echo_access_token', TOKEN_EXPIRY_KEY = 'echo_token_expiry';
 const SHEET_NAME = 'EchoData';
 const SETTINGS_SHEET = '設定';
 const SHEET_COLS = ['平台','網址','帳號','暗號','備註','分類','建立時間'];
@@ -1344,6 +1345,7 @@ function requestToken(promptVal=''){
       }
       accessToken = resp.access_token;
       tokenExpiry = Date.now() + (resp.expires_in - 60) * 1000;
+      persistToken(accessToken, tokenExpiry);
       resolve(accessToken);
     };
     googleTokenClient.callback = handler;
@@ -1359,6 +1361,31 @@ async function ensureToken(){
 // Returns cached token only — never triggers OAuth popup (used for background operations)
 function getTokenIfValid(){
   return (accessToken && Date.now() < tokenExpiry) ? accessToken : null;
+}
+
+// ── TOKEN PERSISTENCE ──
+function persistToken(tok, expiry){
+  localStorage.setItem(TOKEN_STORAGE_KEY, tok);
+  localStorage.setItem(TOKEN_EXPIRY_KEY, String(expiry));
+  console.log('[Echo] persistToken: saved, expires in', Math.round((expiry - Date.now()) / 1000), 's');
+}
+function clearPersistedToken(){
+  localStorage.removeItem(TOKEN_STORAGE_KEY);
+  localStorage.removeItem(TOKEN_EXPIRY_KEY);
+}
+// Restores token from localStorage into memory. Returns true if a valid token was found.
+function restorePersistedToken(){
+  const tok = localStorage.getItem(TOKEN_STORAGE_KEY);
+  const expiry = parseInt(localStorage.getItem(TOKEN_EXPIRY_KEY) || '0', 10);
+  if(tok && expiry > Date.now() + 60000){
+    accessToken = tok;
+    tokenExpiry = expiry;
+    console.log('[Echo] restorePersistedToken: OK — expires in', Math.round((expiry - Date.now()) / 1000), 's');
+    return true;
+  }
+  clearPersistedToken();
+  console.log('[Echo] restorePersistedToken: no valid token in localStorage');
+  return false;
 }
 
 // Shared post-auth PIN routing (used by both popup and redirect flows)
@@ -1396,6 +1423,7 @@ async function handleOAuthRedirect(){
   history.replaceState(null, '', window.location.pathname);
   accessToken = tok;
   tokenExpiry = Date.now() + (expiresIn - 60) * 1000;
+  persistToken(accessToken, tokenExpiry);
   // Restore forgotPinMode that was saved before redirect
   if(sessionStorage.getItem('echo_forgot_pin')){ sessionStorage.removeItem('echo_forgot_pin'); forgotPinMode = true; }
   try {
@@ -1428,7 +1456,7 @@ async function googleLogin(){
   if(window.navigator.standalone){
     window.onOAuthResult = function(email, token, picture){
       window.onOAuthResult = null;
-      if(token){ accessToken = token; tokenExpiry = Date.now() + 3540 * 1000; }
+      if(token){ accessToken = token; tokenExpiry = Date.now() + 3540 * 1000; persistToken(accessToken, tokenExpiry); }
       if(picture) localStorage.setItem(AVATAR_KEY + email, picture);
       proceedToPinAfterAuth(email, token);
     };
@@ -1556,6 +1584,7 @@ function doLogout(){
     google.accounts.oauth2.revoke(accessToken, ()=>{});
   }
   accessToken=null; tokenExpiry=0;
+  clearPersistedToken();
   localStorage.removeItem(USER_KEY);
   currentUser=null; entries=[]; activeCatFilter='全部'; currentPage=1;
   document.getElementById('searchInput').value='';
@@ -2268,6 +2297,9 @@ function loginSuccess(user){
   buildCatFilter(); renderList();
   showScreen('mainScreen');
 
+  // Restore persisted token from localStorage if in-memory token is missing (e.g. app restart)
+  if(!getTokenIfValid()) restorePersistedToken();
+
   if(getTokenIfValid()){
     showSyncHint(false);
     const tok = getTokenIfValid();
@@ -2279,7 +2311,7 @@ function loginSuccess(user){
         syncFromSheetsBackground();
       });
   } else {
-    // No cached token — show hint so user can tap to re-connect without any auto-popup
+    // No valid token anywhere — show hint so user can tap to re-connect
     showSyncHint(true);
   }
 }
@@ -2493,6 +2525,7 @@ function runIntroAnimation(){
       const { email, token, ts } = JSON.parse(pending);
       if(Date.now() - ts < 300000 && email && token){
         accessToken = token; tokenExpiry = Date.now() + 3540 * 1000;
+        persistToken(accessToken, tokenExpiry);
         proceedToPinAfterAuth(email, token);
       }
     } catch {}
