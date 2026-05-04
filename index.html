@@ -102,6 +102,10 @@ input, button, .poppins,
 
 .screen { display:none; min-height:100vh; flex-direction:column; }
 .screen.active { display:flex; }
+@keyframes echoSlideInRight { from { transform:translateX(28%); opacity:0; } to { transform:translateX(0); opacity:1; } }
+@keyframes echoSlideInLeft  { from { transform:translateX(-28%); opacity:0; } to { transform:translateX(0); opacity:1; } }
+.screen.echo-slide-right { animation: echoSlideInRight 0.22s ease-out; }
+.screen.echo-slide-left  { animation: echoSlideInLeft  0.22s ease-out; }
 
 /* ════ LOGIN ════ */
 #loginScreen {
@@ -1178,16 +1182,43 @@ function goBack(){
   }
 }
 
+function applyScreenAnim(id, cls){
+  const el = document.getElementById(id);
+  el.classList.add(cls);
+  el.addEventListener('animationend', () => el.classList.remove(cls), { once: true });
+}
+
 function switchNav(tab){
+  const fromProfile = document.getElementById('profileScreen').classList.contains('active');
+  const fromHome    = document.getElementById('mainScreen').classList.contains('active');
   if(tab==='home'){
     showScreen('mainScreen'); renderList();
+    if(fromProfile) applyScreenAnim('mainScreen', 'echo-slide-left');
     document.getElementById('navHome').classList.add('active');
     document.getElementById('navProfile').classList.remove('active');
   } else {
     showProfile();
+    if(fromHome) applyScreenAnim('profileScreen', 'echo-slide-right');
     document.getElementById('navHome').classList.remove('active');
     document.getElementById('navProfile').classList.add('active');
   }
+}
+
+function initSwipeNav(){
+  let startX = 0, startY = 0;
+  document.addEventListener('touchstart', e => {
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+  }, { passive: true });
+  document.addEventListener('touchend', e => {
+    const dx = e.changedTouches[0].clientX - startX;
+    const dy = e.changedTouches[0].clientY - startY;
+    if(Math.abs(dx) < 50 || Math.abs(dy) > Math.abs(dx)) return;
+    const mainActive    = document.getElementById('mainScreen').classList.contains('active');
+    const profileActive = document.getElementById('profileScreen').classList.contains('active');
+    if(mainActive && dx > 0)    switchNav('profile');
+    else if(profileActive && dx < 0) switchNav('home');
+  }, { passive: true });
 }
 
 function getNick(){
@@ -2572,6 +2603,8 @@ function runIntroAnimation(){
     };
     return;
   }
+
+  initSwipeNav();
 
   // Android back key / iOS right-swipe: intercept for edit / detail / profile screens
   window.addEventListener('popstate', ()=>{
