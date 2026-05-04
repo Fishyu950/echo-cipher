@@ -1102,6 +1102,7 @@ input, button, .poppins,
 <script>
 // ── CONFIG — replace with your Google Cloud OAuth 2.0 Client ID ──
 const GOOGLE_CLIENT_ID = '581562758769-lpbml8lt4qs0tamm4i68u41n2bupeqrd.apps.googleusercontent.com';
+const REDIRECT_URI = 'https://fishyu950.github.io/echo-cipher/';
 // ── CONSTANTS ──
 const CATS = [
   {name:'全部', icon:'apps',            color:'var(--cat-ivory)',      bg:'var(--cat-ivory-bg)'},
@@ -1362,7 +1363,7 @@ function proceedToPinAfterAuth(email, token){
   }
 }
 
-// Handle OAuth redirect callback — used in iOS Safari PWA standalone mode
+// Handle OAuth redirect callback — iOS Safari redirect flow and PWA helper tab
 async function handleOAuthRedirect(){
   const hash = window.location.hash.slice(1);
   if(!hash.includes('access_token')) return false;
@@ -1373,11 +1374,20 @@ async function handleOAuthRedirect(){
   history.replaceState(null, '', window.location.pathname);
   accessToken = tok;
   tokenExpiry = Date.now() + (expiresIn - 60) * 1000;
+  // Restore forgotPinMode that was saved before redirect
+  if(sessionStorage.getItem('echo_forgot_pin')){ sessionStorage.removeItem('echo_forgot_pin'); forgotPinMode = true; }
   try {
     const infoResp = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers: { Authorization: 'Bearer ' + tok } });
     const info = await infoResp.json();
     if(!info.email) return false;
     if(info.picture) localStorage.setItem(AVATAR_KEY + info.email, info.picture);
+    // If opened as PWA OAuth helper tab, return result to opener and close
+    if(window.opener && typeof window.opener.onOAuthResult === 'function'){
+      window.opener.onOAuthResult(info.email, tok, info.picture || null);
+      document.body.innerHTML = '<div style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#f5f3ef;font-family:Poppins,sans-serif;text-align:center"><div><div style="font-size:48px;margin-bottom:16px">✓</div><div style="font-size:20px;font-weight:700;color:#2a2520;margin-bottom:8px">授權成功！</div><div style="font-size:13px;color:#9a948c">請返回 Echo APP</div></div></div>';
+      setTimeout(()=>window.close(), 2000);
+      return true;
+    }
     proceedToPinAfterAuth(info.email, tok);
     return true;
   } catch(e){
@@ -1403,6 +1413,18 @@ async function googleLogin(){
     const url = location.protocol + '//' + location.host + location.pathname + '?echo_oauth=1';
     const w = window.open(url, '_blank');
     if(!w) showToast('請允許開啟瀏覽器視窗以完成登入', 'error');
+    return;
+  }
+  // iOS Safari — ITP blocks GSI popup in normal mode; use redirect flow instead
+  if(/iPad|iPhone|iPod/.test(navigator.userAgent)){
+    if(forgotPinMode) sessionStorage.setItem('echo_forgot_pin', '1');
+    const scope = 'https://www.googleapis.com/auth/drive.file email profile';
+    window.location.href = 'https://accounts.google.com/o/oauth2/v2/auth'
+      + '?client_id=' + encodeURIComponent(GOOGLE_CLIENT_ID)
+      + '&redirect_uri=' + encodeURIComponent(REDIRECT_URI)
+      + '&response_type=token'
+      + '&scope=' + encodeURIComponent(scope)
+      + '&prompt=select_account';
     return;
   }
   if(!googleTokenClient){ showToast('Google 登入初始化中，請稍後', 'error'); return; }
@@ -2255,6 +2277,17 @@ function runIntroAnimation(){
         <button id="oauthBtn" onclick="startOAuthInHelper()" style="width:100%;max-width:280px;padding:16px;background:var(--primary);border:none;border-radius:var(--radius-md);font-family:'Poppins',sans-serif;font-size:15px;font-weight:700;color:white;cursor:pointer;box-shadow:0 4px 16px rgba(245,166,35,0.35)">使用 Google 帳號連結</button>
       </div>`);
     window.startOAuthInHelper = async function(){
+      // iOS ITP blocks GSI popup even inside a Safari tab — use redirect instead
+      if(/iPad|iPhone|iPod/.test(navigator.userAgent)){
+        const scope = 'https://www.googleapis.com/auth/drive.file email profile';
+        window.location.href = 'https://accounts.google.com/o/oauth2/v2/auth'
+          + '?client_id=' + encodeURIComponent(GOOGLE_CLIENT_ID)
+          + '&redirect_uri=' + encodeURIComponent(REDIRECT_URI)
+          + '&response_type=token'
+          + '&scope=' + encodeURIComponent(scope)
+          + '&prompt=select_account';
+        return;
+      }
       const btn = document.getElementById('oauthBtn');
       btn.disabled = true; btn.textContent = '授權中…';
       let waited = 0;
