@@ -943,17 +943,6 @@ input, button, .poppins,
       <span class="mi">keyboard_arrow_up</span>
     </button>
   </div>
-  <div class="bottom-nav">
-    <div class="nav-item active" id="navHome" onclick="switchNav('home')">
-      <span class="mi">home</span><span>主頁</span>
-    </div>
-    <div style="flex:0.5"></div>
-    <button class="nav-fab" onclick="openEdit(null)"><span class="mi">add</span></button>
-    <div style="flex:0.5"></div>
-    <div class="nav-item" id="navProfile" onclick="switchNav('profile')">
-      <span class="mi">person</span><span>帳號</span>
-    </div>
-  </div>
 </div>
 
 <!-- ════ EDIT ════ -->
@@ -1088,18 +1077,20 @@ input, button, .poppins,
         <div class="profile-row-arrow"><span class="mi">chevron_right</span></div>
       </div>
     </div>
-    <div class="profile-version">Echo v1.1.7 build 20260505</div>
+    <div class="profile-version">Echo v1.1.8 build 20260505</div>
   </div>
-  <div class="bottom-nav">
-    <div class="nav-item" id="navHome2" onclick="switchNav('home')">
-      <span class="mi">home</span><span>主頁</span>
-    </div>
-    <div style="flex:0.5"></div>
-    <button class="nav-fab" onclick="openEdit(null)"><span class="mi">add</span></button>
-    <div style="flex:0.5"></div>
-    <div class="nav-item active" id="navProfile2">
-      <span class="mi">person</span><span>帳號</span>
-    </div>
+</div>
+
+<!-- ════ GLOBAL BOTTOM NAV ════ -->
+<div class="bottom-nav" id="globalBottomNav" style="display:none">
+  <div class="nav-item active" id="navHome" onclick="switchNav('home')">
+    <span class="mi">home</span><span>主頁</span>
+  </div>
+  <div style="flex:0.5"></div>
+  <button class="nav-fab" onclick="openEdit(null)"><span class="mi">add</span></button>
+  <div style="flex:0.5"></div>
+  <div class="nav-item" id="navProfile" onclick="switchNav('profile')">
+    <span class="mi">person</span><span>帳號</span>
   </div>
 </div>
 
@@ -1156,6 +1147,8 @@ function showScreen(id){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   window.scrollTo(0,0);
+  const nav = document.getElementById('globalBottomNav');
+  if(nav) nav.style.display = (id === 'mainScreen' || id === 'profileScreen') ? 'flex' : 'none';
 }
 
 function showToast(msg, type=''){
@@ -1213,31 +1206,38 @@ function switchNav(tab, anim){
 }
 
 function initSwipeNav(){
-  let startX = 0, startY = 0;
+  let startX = 0, startY = 0, startTime = 0;
 
   document.addEventListener('touchstart', e => {
     startX = e.touches[0].clientX;
     startY = e.touches[0].clientY;
+    startTime = Date.now();
   }, { passive: true });
 
   document.addEventListener('touchend', e => {
-    // Only active on the two tab pages
-    const onMain    = document.getElementById('mainScreen').classList.contains('active');
-    const onProfile = document.getElementById('profileScreen').classList.contains('active');
-    if(!onMain && !onProfile) return;
-
     const dx = e.changedTouches[0].clientX - startX;
     const dy = e.changedTouches[0].clientY - startY;
+    const velocity = Math.abs(dx) / Math.max(Date.now() - startTime, 1);
 
-    if(Math.abs(dy) > Math.abs(dx)) return;  // more vertical than horizontal → ignore
-    if(Math.abs(dx) < 30) return;            // too short → ignore
+    if(Math.abs(dy) > Math.abs(dx) * 1.5) return;        // too vertical → ignore
+    if(Math.abs(dx) < 30 && velocity <= 0.3) return;     // too small & slow → ignore
 
-    // navPage 0 = Home, 1 = Profile
-    // swipe left (dx<0) on home  → profile
-    // swipe right (dx>0) on profile → home
-    // all other directions → boundary, do nothing
-    if(navPage === 0 && dx < 0)      switchNav('profile');
-    else if(navPage === 1 && dx > 0) switchNav('home');
+    const onMain    = document.getElementById('mainScreen').classList.contains('active');
+    const onProfile = document.getElementById('profileScreen').classList.contains('active');
+    const onDetail  = document.getElementById('detailScreen').classList.contains('active');
+    const onEdit    = document.getElementById('editScreen').classList.contains('active');
+
+    if(onMain || onProfile){
+      // Tab navigation: navPage 0=home, 1=profile
+      // wrong direction → boundary, do nothing
+      if     (navPage === 0 && dx < 0) switchNav('profile');
+      else if(navPage === 1 && dx > 0) switchNav('home');
+    } else if(onDetail && dx > 0){
+      switchNav('home');
+    } else if(onEdit && dx > 0){
+      if(editingId) showScreen('detailScreen');
+      else switchNav('home');
+    }
   }, { passive: true });
 }
 
