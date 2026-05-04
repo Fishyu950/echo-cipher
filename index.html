@@ -1083,7 +1083,7 @@ input, button, .poppins,
         <div class="profile-row-arrow"><span class="mi">chevron_right</span></div>
       </div>
     </div>
-    <div class="profile-version">Echo v1.0.9 build 20260504</div>
+    <div class="profile-version">Echo v1.1.0 build 20260504</div>
   </div>
   <div class="bottom-nav">
     <div class="nav-item" id="navHome2" onclick="switchNav('home')">
@@ -1128,7 +1128,7 @@ const PIN_KEY = 'echo_pin_', USER_KEY = 'echo_current_user', SHEET_ID_KEY = 'ech
 const TOKEN_STORAGE_KEY = 'echo_access_token', TOKEN_EXPIRY_KEY = 'echo_token_expiry';
 const SHEET_NAME = 'EchoData';
 const SETTINGS_SHEET = '設定';
-const SHEET_COLS = ['平台','網址','帳號','暗號','備註','分類','建立時間'];
+const SHEET_COLS = ['平台','網址','帳號','暗號','備註','分類','emoji','建立時間'];
 
 // ── STATE ──
 let currentUser=null, entries=[], editingId=null, detailId=null;
@@ -1688,7 +1688,7 @@ async function ensureSheet(token){
 
     // 3c. Write backup to new sheet immediately (direction is always localStorage → Sheets, never reversed)
     const backupRows = [SHEET_COLS, ...localBackup.map(e=>[
-      e.platform, e.url||'', e.account, e.hint||'', e.note||'', e.category||'其他', e.createdAt
+      e.platform, e.url||'', e.account, e.hint||'', e.note||'', e.category||'其他', e.emoji||'🔑', e.createdAt
     ])];
     console.log('[Echo] ensureSheet: [REBUILD] step 3 — writing', localBackup.length, 'entries to new sheet...');
     await writeSheet(sheetId, token, backupRows);
@@ -1773,27 +1773,36 @@ async function writeSheet(sheetId, token, rows){
   if(!resp.ok) throw new Error('write:'+resp.status);
 }
 
-// Parse sheet rows — handles old 8-col (ID first), previous 6-col, and new 7-col (with 網址)
+// Parse sheet rows — handles 4 formats:
+// 1. Old 8-col (ID first): ID,平台,帳號,暗號,備註,分類,emoji,建立時間
+// 2. Previous 6-col (no url/emoji): 平台,帳號,暗號,備註,分類,建立時間
+// 3. Previous 7-col (url, no emoji): 平台,網址,帳號,暗號,備註,分類,建立時間
+// 4. Current 8-col (url + emoji): 平台,網址,帳號,暗號,備註,分類,emoji,建立時間
 function parseSheetRows(allRows){
   if(!allRows || allRows.length < 2) return [];
   const h = allRows[0];
-  const isOldId = h[0] === 'ID';   // legacy: ID,平台,帳號,暗號,備註,分類,emoji,建立時間
-  const hasUrl  = h[1] === '網址'; // current: 平台,網址,帳號,暗號,備註,分類,建立時間
+  const isOldId  = h[0] === 'ID';     // format 1
+  const hasUrl   = h[1] === '網址';   // format 3 or 4
+  const hasEmoji = h[6] === 'emoji';  // format 4 (h[6]='emoji') vs format 3 (h[6]='建立時間')
   return allRows.slice(1)
     .filter(r => r[isOldId ? 1 : 0])
     .map(r => {
-      if(isOldId) return {
+      if(isOldId) return {                                                   // format 1
         id: r[0]||uid(), platform: r[1]||'', url: '', account: r[2]||'',
         hint: r[3]||'', note: r[4]||'', category: r[5]||'其他',
         emoji: r[6]||'🔑', createdAt: r[7]||new Date().toISOString()
       };
-      if(hasUrl) return {
+      if(hasUrl && hasEmoji) return {                                        // format 4 ← current
+        id: uid(), platform: r[0]||'', url: r[1]||'', account: r[2]||'',
+        hint: r[3]||'', note: r[4]||'', category: r[5]||'其他',
+        emoji: r[6]||'🔑', createdAt: r[7]||new Date().toISOString()
+      };
+      if(hasUrl) return {                                                    // format 3 (legacy)
         id: uid(), platform: r[0]||'', url: r[1]||'', account: r[2]||'',
         hint: r[3]||'', note: r[4]||'', category: r[5]||'其他',
         emoji: '🔑', createdAt: r[6]||new Date().toISOString()
       };
-      // Previous 6-col format without 網址
-      return {
+      return {                                                               // format 2 (legacy)
         id: uid(), platform: r[0]||'', url: '', account: r[1]||'',
         hint: r[2]||'', note: r[3]||'', category: r[4]||'其他',
         emoji: '🔑', createdAt: r[5]||new Date().toISOString()
@@ -1835,7 +1844,7 @@ async function saveToSheets(email, data, providedToken = null){
   const token = providedToken || await ensureToken();
   const { sheetId } = await ensureSheet(token);
   const rows = [SHEET_COLS, ...data.map(e=>[
-    e.platform, e.url||'', e.account, e.hint||'', e.note||'', e.category||'其他', e.createdAt
+    e.platform, e.url||'', e.account, e.hint||'', e.note||'', e.category||'其他', e.emoji||'🔑', e.createdAt
   ])];
   await writeSheet(sheetId, token, rows);
 }
@@ -2019,7 +2028,7 @@ async function doSync(){
     // Sheet was just created — push local data directly (skip ensureSheet round-trip inside saveToSheets)
     console.log('[Echo] doSync: new sheet — uploading', entries.length, 'entries (local → Sheets)');
     const uploadRows = [SHEET_COLS, ...entries.map(e=>[
-      e.platform, e.url||'', e.account, e.hint||'', e.note||'', e.category||'其他', e.createdAt
+      e.platform, e.url||'', e.account, e.hint||'', e.note||'', e.category||'其他', e.emoji||'🔑', e.createdAt
     ])];
     await writeSheet(sheetId, token, uploadRows);
     console.log('[Echo] doSync: upload complete');
