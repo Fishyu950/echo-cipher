@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Echo</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect fill='%23E59A2D' width='512' height='512'/><path fill='%23FFFFFF' d='M346.34,212.71h-0.61v-21.3c0-48.01-38.92-86.93-86.93-86.93h-5.59c-48.01,0-86.93,38.92-86.93,86.93v21.3h-0.61c-12.19,0-22.08,9.88-22.08,22.08v150.65c0,12.19,9.88,22.08,22.08,22.08h180.67c12.19,0,22.08-9.88,22.08-22.08V234.79C368.41,222.59,358.53,212.71,346.34,212.71z M218.52,156.73c9.26-9.27,21.58-14.37,34.68-14.37h5.59c13.1,0,25.42,5.1,34.68,14.37c9.26,9.26,14.37,21.58,14.37,34.68v21.3H204.16v-21.3C204.16,178.31,209.26,166,218.52,156.73z M268.22,327.33v31.65c0,6.75-5.47,12.22-12.22,12.22s-12.22-5.47-12.22-12.22v-31.65c-5.39-3.83-8.9-10.11-8.9-17.22c0-11.67,9.46-21.12,21.12-21.12c11.66,0,21.12,9.46,21.12,21.12C277.12,317.22,273.6,323.51,268.22,327.33z'/></svg>">
-<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png?v=2">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Echo">
@@ -1078,7 +1078,7 @@ input, button, .poppins,
         <div class="profile-row-arrow"><span class="mi">chevron_right</span></div>
       </div>
     </div>
-    <div class="profile-version">Echo v1.0.6 build 20260504</div>
+    <div class="profile-version">Echo v1.0.7 build 20260504</div>
   </div>
   <div class="bottom-nav">
     <div class="nav-item" id="navHome2" onclick="switchNav('home')">
@@ -1162,7 +1162,13 @@ function showSyncOverlay(show, label='正在同步資料…'){
   if(label) document.getElementById('syncLabel').textContent = label;
 }
 
-function goBack(){ switchNav('home'); }
+function goBack(){
+  if(document.getElementById('editScreen').classList.contains('active') && editingId){
+    showScreen('detailScreen');
+  } else {
+    switchNav('home');
+  }
+}
 
 function switchNav(tab){
   if(tab==='home'){
@@ -1226,6 +1232,7 @@ function showProfile(){
   const sheetId = currentUser ? localStorage.getItem(SHEET_ID_KEY + currentUser) : null;
   document.getElementById('profileMeta').textContent = sheetId ? '已連結 Google Sheets' : '尚未同步至雲端';
   showScreen('profileScreen');
+  history.pushState({echo:'profile'}, '');
 }
 
 function editNickname(){
@@ -1846,6 +1853,54 @@ function applyNick(nick){
   applyAvatars(currentUser);
 }
 
+// ── SHEET HEALTH ──
+function showSheetMissingBanner(){
+  if(document.getElementById('sheetMissingBanner')) return;
+  const banner = document.createElement('div');
+  banner.id = 'sheetMissingBanner';
+  banner.style.cssText = [
+    'position:sticky','top:0','z-index:200',
+    'background:#e74c3c','color:#fff',
+    'padding:12px 20px','text-align:center',
+    'cursor:pointer','font-size:14px','font-weight:600',
+    'letter-spacing:.02em','line-height:1.4'
+  ].join(';');
+  banner.textContent = '⚠️ 試算表已遺失，點此重新建立';
+  banner.onclick = async () => {
+    banner.textContent = '正在重新建立試算表…';
+    banner.onclick = null;
+    try { await manualSync(); } catch {}
+    hideSheetMissingBanner();
+  };
+  const main = document.getElementById('mainScreen');
+  if(main) main.insertBefore(banner, main.firstChild);
+}
+
+function hideSheetMissingBanner(){
+  const b = document.getElementById('sheetMissingBanner');
+  if(b) b.remove();
+}
+
+async function verifySheetExists(){
+  const token = getTokenIfValid();
+  if(!token || !currentUser) return;
+  const sheetId = localStorage.getItem(SHEET_ID_KEY + currentUser);
+  if(!sheetId) return;
+  try {
+    const resp = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}?fields=spreadsheetId`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if(resp.status === 404){
+      console.log('[Echo] verifySheetExists: 404 — sheet deleted, showing warning banner');
+      localStorage.removeItem(SHEET_ID_KEY + currentUser);
+      showSheetMissingBanner();
+    } else if(resp.ok){
+      hideSheetMissingBanner();
+    }
+  } catch { /* network error — silent */ }
+}
+
 // ── BACKGROUND SYNC ──
 // Uses only cached token — never pops an OAuth dialog for background operations.
 async function syncToSheetsBackground(){
@@ -1936,9 +1991,13 @@ async function manualSync(){
     showSyncHint(false);
     showToast('同步完成', 'success');
     document.getElementById('profileMeta').textContent = '已連結 Google Sheets';
+    hideSheetMissingBanner();
   } catch(e){
     console.error('[Echo] manualSync error:', e);
-    showToast(e.message || '同步失敗', 'error');
+    const msg = /404|not_found/.test(e.message||'')
+      ? '同步失敗，試算表不存在'
+      : (e.message || '同步失敗');
+    showToast(msg, 'error');
   } finally {
     showSyncOverlay(false);
   }
@@ -2063,6 +2122,7 @@ function openDetail(id){
       <div class="detail-block-value" style="font-size:13px;color:var(--ink3)">${new Date(e.createdAt).toLocaleString('zh-TW')}</div>
     </div>`;
   showScreen('detailScreen');
+  history.pushState({echo:'detail'}, '');
 }
 
 function openEditFromDetail(){ openEdit(detailId); }
@@ -2107,7 +2167,13 @@ function openEdit(id){
     selectedCat='其他'; selectedEmoji='🔑';
   }
   buildEmojiGrid(); buildCatSelect(); showScreen('editScreen');
-  history.pushState({echo:'edit'}, '');
+  if(id){
+    // came from detail — push 2 states so first back returns to detail, second returns to main
+    history.pushState({echo:'edit-back'}, '');
+    history.pushState({echo:'edit'}, '');
+  } else {
+    history.pushState({echo:'edit'}, '');
+  }
 }
 
 function saveEntry(){
@@ -2127,7 +2193,7 @@ function saveEntry(){
   }else{
     entries.unshift({id:uid(),platform,url,account,hint,note,category:selectedCat,emoji:selectedEmoji,createdAt:new Date().toISOString()});
   }
-  saveUserData(currentUser,entries); goBack();
+  saveUserData(currentUser,entries); switchNav('home');
   syncToSheetsBackground();
 }
 
@@ -2138,7 +2204,7 @@ function autoResize(el){
 
 function deleteEntry(){
   entries=entries.filter(e=>e.id!==editingId);
-  saveUserData(currentUser,entries); goBack();
+  saveUserData(currentUser,entries); switchNav('home');
   syncToSheetsBackground();
 }
 
@@ -2157,7 +2223,14 @@ function loginSuccess(user){
 
   if(getTokenIfValid()){
     showSyncHint(false);
-    syncFromSheetsBackground();
+    const tok = getTokenIfValid();
+    // Always ensure sheet exists on login; create/restore if deleted
+    ensureSheet(tok)
+      .then(() => syncFromSheetsBackground())
+      .catch(err => {
+        console.warn('[Echo] loginSuccess: ensureSheet error:', err);
+        syncFromSheetsBackground();
+      });
   } else {
     // No cached token — show hint so user can tap to re-connect without any auto-popup
     showSyncHint(true);
@@ -2343,12 +2416,25 @@ function runIntroAnimation(){
     return;
   }
 
-  // Android back key / iOS right-swipe: intercept when edit screen is active
+  // Android back key / iOS right-swipe: intercept for edit / detail / profile screens
   window.addEventListener('popstate', ()=>{
     if(document.getElementById('editScreen').classList.contains('active')){
-      goBack();
+      // if editing an existing entry, first back goes to detail; otherwise goes home
+      if(editingId){ showScreen('detailScreen'); }
+      else { switchNav('home'); }
+    } else if(document.getElementById('detailScreen').classList.contains('active')){
+      switchNav('home');
+    } else if(document.getElementById('profileScreen').classList.contains('active')){
+      switchNav('home');
     }
   });
+
+  // Periodic sheet existence check (every 5 minutes while on main screen)
+  setInterval(()=>{
+    if(currentUser && document.getElementById('mainScreen').classList.contains('active')){
+      verifySheetExists();
+    }
+  }, 300000);
 
   // Handle return from Safari OAuth tab (fallback when window.opener is unavailable)
   window.addEventListener('visibilitychange', ()=>{
