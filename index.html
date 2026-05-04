@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Echo</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect fill='%23E59A2D' width='512' height='512'/><path fill='%23FFFFFF' d='M346.34,212.71h-0.61v-21.3c0-48.01-38.92-86.93-86.93-86.93h-5.59c-48.01,0-86.93,38.92-86.93,86.93v21.3h-0.61c-12.19,0-22.08,9.88-22.08,22.08v150.65c0,12.19,9.88,22.08,22.08,22.08h180.67c12.19,0,22.08-9.88,22.08-22.08V234.79C368.41,222.59,358.53,212.71,346.34,212.71z M218.52,156.73c9.26-9.27,21.58-14.37,34.68-14.37h5.59c13.1,0,25.42,5.1,34.68,14.37c9.26,9.26,14.37,21.58,14.37,34.68v21.3H204.16v-21.3C204.16,178.31,209.26,166,218.52,156.73z M268.22,327.33v31.65c0,6.75-5.47,12.22-12.22,12.22s-12.22-5.47-12.22-12.22v-31.65c-5.39-3.83-8.9-10.11-8.9-17.22c0-11.67,9.46-21.12,21.12-21.12c11.66,0,21.12,9.46,21.12,21.12C277.12,317.22,273.6,323.51,268.22,327.33z'/></svg>">
-<link rel="apple-touch-icon" href="apple-touch-icon.png?v=2">
+<link rel="apple-touch-icon" href="apple-touch-icon.png?v=3">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Echo">
@@ -1083,7 +1083,7 @@ input, button, .poppins,
         <div class="profile-row-arrow"><span class="mi">chevron_right</span></div>
       </div>
     </div>
-    <div class="profile-version">Echo v1.1.0 build 20260504</div>
+    <div class="profile-version">Echo v1.1.1 build 20260504</div>
   </div>
   <div class="bottom-nav">
     <div class="nav-item" id="navHome2" onclick="switchNav('home')">
@@ -1126,6 +1126,7 @@ const PER_PAGE = 10;
 const DATA_PFX = 'echo_data_';
 const PIN_KEY = 'echo_pin_', USER_KEY = 'echo_current_user', SHEET_ID_KEY = 'echo_sheet_', NICK_KEY = 'echo_nick_', AVATAR_KEY = 'echo_avatar_';
 const TOKEN_STORAGE_KEY = 'echo_access_token', TOKEN_EXPIRY_KEY = 'echo_token_expiry';
+const LAST_MODIFIED_LSKEY = 'echo_last_modified_';
 const SHEET_NAME = 'EchoData';
 const SETTINGS_SHEET = '設定';
 const SHEET_COLS = ['平台','網址','帳號','暗號','備註','分類','emoji','建立時間'];
@@ -1194,6 +1195,14 @@ function getNick(){
   return localStorage.getItem(NICK_KEY + currentUser) || def;
 }
 
+function getLocalLastModified(){
+  const v = localStorage.getItem(LAST_MODIFIED_LSKEY + currentUser);
+  return v ? parseInt(v, 10) : 0;
+}
+function touchLocalModified(){
+  if(currentUser) localStorage.setItem(LAST_MODIFIED_LSKEY + currentUser, String(Date.now()));
+}
+
 function resetNickDisplay(){
   const nick = getNick();
   const nameSpan = document.getElementById('profileNickname');
@@ -1228,7 +1237,7 @@ function finishNickEdit(val){
   const nick = val.trim() || def;
   resetNickDisplay();
   applyNick(nick);
-  saveNickToSheets(nick);
+  saveSettingsToSheets(nick, getLocalLastModified());
 }
 
 function showProfile(){
@@ -1279,7 +1288,7 @@ function importData(){
         const existingIds = new Set(entries.map(e => e.id));
         const added = imported.filter(e => e.id && e.platform && !existingIds.has(e.id));
         entries = [...added, ...entries];
-        saveUserData(currentUser, entries);
+        saveUserData(currentUser, entries); touchLocalModified();
         renderList();
         showToast(`已匯入 ${added.length} 筆資料`, 'success');
         syncToSheetsBackground();
@@ -1849,21 +1858,25 @@ async function saveToSheets(email, data, providedToken = null){
   await writeSheet(sheetId, token, rows);
 }
 
-// ── NICKNAME ↔ SHEETS ──
-async function loadNickFromSheets(sheetId, token){
+// ── SETTINGS (nickname + lastModified) ↔ SHEETS ──
+async function loadSettingsFromSheets(sheetId, token){
   try {
     const resp = await fetch(
       `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(SETTINGS_SHEET)}!A:B`,
       { headers: { Authorization: `Bearer ${token}` } }
     );
-    if(!resp.ok) return null;
+    if(!resp.ok) return { nick: null, lastModified: null };
     const rows = (await resp.json()).values || [];
-    const row = rows.find(r => r[0] === 'nickname');
-    return row ? (row[1] || null) : null;
-  } catch { return null; }
+    const nickRow = rows.find(r => r[0] === 'nickname');
+    const tsRow   = rows.find(r => r[0] === 'lastModified');
+    return {
+      nick: nickRow ? (nickRow[1] || null) : null,
+      lastModified: tsRow ? (parseInt(tsRow[1], 10) || null) : null
+    };
+  } catch { return { nick: null, lastModified: null }; }
 }
 
-async function saveNickToSheets(nick){
+async function saveSettingsToSheets(nick, ts){
   const token = getTokenIfValid();
   if(!token || !currentUser) return;
   try {
@@ -1874,7 +1887,7 @@ async function saveNickToSheets(nick){
       {
         method: 'PUT',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ values: [['key','value'],['nickname', nick]], majorDimension: 'ROWS' })
+        body: JSON.stringify({ values: [['key','value'],['nickname', nick || ''],['lastModified', String(ts || Date.now())]], majorDimension: 'ROWS' })
       }
     );
   } catch { /* silent */ }
@@ -1980,36 +1993,46 @@ async function syncFromSheetsBackground(){
   const token = getTokenIfValid();
   if(!token || !currentUser) return;
   try {
-    // Pass pre-validated token — never call ensureToken() or requestToken() from background path
-    const sheetEntries = await loadFromSheets(currentUser, token);
+    const sheetId = localStorage.getItem(SHEET_ID_KEY + currentUser);
+    // Load settings (nick + lastModified) and data in parallel
+    const [sheetEntries, settings] = await Promise.all([
+      loadFromSheets(currentUser, token),
+      sheetId ? loadSettingsFromSheets(sheetId, token) : Promise.resolve({ nick: null, lastModified: null })
+    ]);
+
     if(sheetEntries !== null){
-      const localCount = entries.length;
-      const sheetsCount = sheetEntries.length;
-      console.log('[Echo] syncFromSheets: local =', localCount, '| Sheets =', sheetsCount);
-      if(localCount > sheetsCount){
-        // Local has more entries — local wins, upload to Sheets
-        console.log('[Echo] syncFromSheets: local wins (more entries) → uploading to Sheets');
+      const localTs   = getLocalLastModified();
+      const sheetsTs  = settings.lastModified;
+      console.log('[Echo] syncFromSheets: localTs =', localTs, '| sheetsTs =', sheetsTs);
+
+      if(sheetsTs === null){
+        // Old sheet with no lastModified — Sheets takes priority (legacy behaviour)
+        if(sheetEntries.length > 0){
+          console.log('[Echo] syncFromSheets: no sheetsTs (legacy) → Sheets wins, downloading');
+          entries = sheetEntries;
+          saveUserData(currentUser, entries);
+          renderList();
+        }
+      } else if(localTs >= sheetsTs){
+        // Local is newer or same — push local to Sheets
+        console.log('[Echo] syncFromSheets: local newer or equal → uploading to Sheets');
         await saveToSheets(currentUser, entries, token);
-      } else if(sheetsCount > 0){
-        // Sheets has more, or equal count (cloud priority) — Sheets wins, download to local
-        console.log('[Echo] syncFromSheets: Sheets wins (', sheetsCount >= localCount ? 'same count or more' : '', ') → downloading to local');
+        await saveSettingsToSheets(getNick(), localTs);
+      } else {
+        // Sheets is newer — pull from Sheets
+        console.log('[Echo] syncFromSheets: Sheets newer → downloading to local');
         entries = sheetEntries;
         saveUserData(currentUser, entries);
+        localStorage.setItem(LAST_MODIFIED_LSKEY + currentUser, String(sheetsTs));
         renderList();
-      } else {
-        // Both empty — no action needed
-        console.log('[Echo] syncFromSheets: both empty — no action');
       }
     }
-    // Pull nickname from 設定 sheet
-    const sheetId = localStorage.getItem(SHEET_ID_KEY + currentUser);
-    if(sheetId){
-      const remoteNick = await loadNickFromSheets(sheetId, token);
-      if(remoteNick){
-        const def = currentUser.includes('@') ? currentUser.split('@')[0] : currentUser;
-        const localNick = localStorage.getItem(NICK_KEY + currentUser) || def;
-        if(remoteNick !== localNick) applyNick(remoteNick);
-      }
+
+    // Sync nickname
+    if(settings.nick){
+      const def = currentUser.includes('@') ? currentUser.split('@')[0] : currentUser;
+      const localNick = localStorage.getItem(NICK_KEY + currentUser) || def;
+      if(settings.nick !== localNick) applyNick(settings.nick);
     }
     document.getElementById('profileMeta').textContent = '已連結 Google Sheets';
   } catch(e){ /* silent */ }
@@ -2025,44 +2048,61 @@ async function doSync(){
   console.log('[Echo] doSync: sheetId =', sheetId, '| isNew =', isNew);
 
   if(isNew){
-    // Sheet was just created — push local data directly (skip ensureSheet round-trip inside saveToSheets)
+    // Sheet was just created — push local data and settings directly
     console.log('[Echo] doSync: new sheet — uploading', entries.length, 'entries (local → Sheets)');
     const uploadRows = [SHEET_COLS, ...entries.map(e=>[
       e.platform, e.url||'', e.account, e.hint||'', e.note||'', e.category||'其他', e.emoji||'🔑', e.createdAt
     ])];
     await writeSheet(sheetId, token, uploadRows);
+    const localTs = getLocalLastModified() || Date.now();
+    await saveSettingsToSheets(getNick(), localTs);
     console.log('[Echo] doSync: upload complete');
-    await saveNickToSheets(getNick());
   } else {
-    // Existing sheet — count-based conflict resolution
-    const sheetEntries = await loadFromSheets(currentUser);
-    const localCount = entries.length;
-    const sheetsCount = sheetEntries !== null ? sheetEntries.length : null;
-    console.log('[Echo] doSync: local =', localCount, '| Sheets =', sheetsCount !== null ? sheetsCount : 'read failed');
+    // Existing sheet — timestamp-based conflict resolution
+    const [sheetEntries, settings] = await Promise.all([
+      loadFromSheets(currentUser),
+      loadSettingsFromSheets(sheetId, token)
+    ]);
+    const localTs  = getLocalLastModified();
+    const sheetsTs = settings.lastModified;
+    console.log('[Echo] doSync: localTs =', localTs, '| sheetsTs =', sheetsTs);
+
     if(sheetEntries !== null){
-      if(localCount > sheetsCount){
-        // Local has more entries — local wins, will upload below
-        console.log('[Echo] doSync: local wins (more entries) → uploading to Sheets');
-      } else if(sheetsCount > 0){
-        // Sheets has more, or equal count (cloud priority) — Sheets wins
-        console.log('[Echo] doSync: Sheets wins (', sheetsCount > localCount ? 'more entries' : 'same count, cloud priority', ') → downloading to local');
+      if(sheetsTs === null){
+        // Old sheet with no lastModified — Sheets takes priority (legacy)
+        if(sheetEntries.length > 0){
+          console.log('[Echo] doSync: no sheetsTs (legacy) → Sheets wins');
+          entries = sheetEntries;
+          saveUserData(currentUser, entries);
+          renderList();
+        } else {
+          console.log('[Echo] doSync: no sheetsTs + Sheets empty → keeping local');
+        }
+      } else if(localTs >= sheetsTs){
+        console.log('[Echo] doSync: local newer or equal → uploading to Sheets');
+        // will upload below
+      } else {
+        console.log('[Echo] doSync: Sheets newer → downloading to local');
         entries = sheetEntries;
         saveUserData(currentUser, entries);
+        localStorage.setItem(LAST_MODIFIED_LSKEY + currentUser, String(sheetsTs));
         renderList();
-      } else {
-        // Sheets empty — keep local data, will upload below
-        console.log('[Echo] doSync: Sheets empty — keeping local data');
       }
     }
+
+    // Write current state (whichever won) back to Sheets with updated timestamp
+    const finalTs = Math.max(localTs, sheetsTs || 0, Date.now());
     await saveToSheets(currentUser, entries);
     console.log('[Echo] doSync: saved', entries.length, 'entries to Sheets');
-    const remoteNick = await loadNickFromSheets(sheetId, token);
-    if(remoteNick){
+
+    // Sync nickname
+    const nick = getNick();
+    const remoteNick = settings.nick;
+    if(remoteNick && sheetsTs !== null && (sheetsTs > localTs)){
       const def = currentUser.includes('@') ? currentUser.split('@')[0] : currentUser;
       if(remoteNick !== (localStorage.getItem(NICK_KEY + currentUser) || def)) applyNick(remoteNick);
-    } else {
-      await saveNickToSheets(getNick());
     }
+    await saveSettingsToSheets(getNick(), finalTs);
   }
 }
 
@@ -2213,7 +2253,7 @@ function openDetail(id){
 function openEditFromDetail(){ openEdit(detailId); }
 function deleteFromDetail(){
   entries=entries.filter(e=>e.id!==detailId);
-  saveUserData(currentUser,entries); goBack();
+  saveUserData(currentUser,entries); touchLocalModified(); goBack();
   syncToSheetsBackground();
 }
 
@@ -2278,7 +2318,7 @@ function saveEntry(){
   }else{
     entries.unshift({id:uid(),platform,url,account,hint,note,category:selectedCat,emoji:selectedEmoji,createdAt:new Date().toISOString()});
   }
-  saveUserData(currentUser,entries); switchNav('home');
+  saveUserData(currentUser,entries); touchLocalModified(); switchNav('home');
   syncToSheetsBackground();
 }
 
@@ -2289,7 +2329,7 @@ function autoResize(el){
 
 function deleteEntry(){
   entries=entries.filter(e=>e.id!==editingId);
-  saveUserData(currentUser,entries); switchNav('home');
+  saveUserData(currentUser,entries); touchLocalModified(); switchNav('home');
   syncToSheetsBackground();
 }
 
