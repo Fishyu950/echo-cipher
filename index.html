@@ -1083,7 +1083,7 @@ input, button, .poppins,
         <div class="profile-row-arrow"><span class="mi">chevron_right</span></div>
       </div>
     </div>
-    <div class="profile-version">Echo v1.1.2 build 20260504</div>
+    <div class="profile-version">Echo v1.1.3 build 20260504</div>
   </div>
   <div class="bottom-nav">
     <div class="nav-item" id="navHome2" onclick="switchNav('home')">
@@ -1129,7 +1129,7 @@ const TOKEN_STORAGE_KEY = 'echo_access_token', TOKEN_EXPIRY_KEY = 'echo_token_ex
 const LAST_MODIFIED_LSKEY = 'echo_last_modified_';
 const SHEET_NAME = 'EchoData';
 const SETTINGS_SHEET = '設定';
-const SHEET_COLS = ['平台','網址','帳號','暗號','備註','分類','emoji','建立時間'];
+const SHEET_COLS = ['平台','網址','帳號','暗號','備註','分類','emoji','建立時間','_id'];
 
 // ── STATE ──
 let currentUser=null, entries=[], editingId=null, detailId=null;
@@ -1697,7 +1697,7 @@ async function ensureSheet(token){
 
     // 3c. Write backup to new sheet immediately (direction is always localStorage → Sheets, never reversed)
     const backupRows = [SHEET_COLS, ...localBackup.map(e=>[
-      e.platform, e.url||'', e.account, e.hint||'', e.note||'', e.category||'其他', e.emoji||'🔑', e.createdAt
+      e.platform, e.url||'', e.account, e.hint||'', e.note||'', e.category||'其他', e.emoji||'🔑', e.createdAt, e.id||uid()
     ])];
     console.log('[Echo] ensureSheet: [REBUILD] step 3 — writing', localBackup.length, 'entries to new sheet...');
     await writeSheet(sheetId, token, backupRows);
@@ -1793,30 +1793,43 @@ function parseSheetRows(allRows){
   const isOldId  = h[0] === 'ID';     // format 1
   const hasUrl   = h[1] === '網址';   // format 3 or 4
   const hasEmoji = h[6] === 'emoji';  // format 4 (h[6]='emoji') vs format 3 (h[6]='建立時間')
-  return allRows.slice(1)
+  console.log('[Echo] parseSheetRows: header =', JSON.stringify(h),
+    '| isOldId =', isOldId, '| hasUrl =', hasUrl, '| hasEmoji =', hasEmoji);
+  const result = allRows.slice(1)
     .filter(r => r[isOldId ? 1 : 0])
-    .map(r => {
-      if(isOldId) return {                                                   // format 1
-        id: r[0]||uid(), platform: r[1]||'', url: '', account: r[2]||'',
-        hint: r[3]||'', note: r[4]||'', category: r[5]||'其他',
-        emoji: r[6]||'🔑', createdAt: r[7]||new Date().toISOString()
-      };
-      if(hasUrl && hasEmoji) return {                                        // format 4 ← current
-        id: uid(), platform: r[0]||'', url: r[1]||'', account: r[2]||'',
-        hint: r[3]||'', note: r[4]||'', category: r[5]||'其他',
-        emoji: r[6]||'🔑', createdAt: r[7]||new Date().toISOString()
-      };
-      if(hasUrl) return {                                                    // format 3 (legacy)
-        id: uid(), platform: r[0]||'', url: r[1]||'', account: r[2]||'',
-        hint: r[3]||'', note: r[4]||'', category: r[5]||'其他',
-        emoji: '🔑', createdAt: r[6]||new Date().toISOString()
-      };
-      return {                                                               // format 2 (legacy)
-        id: uid(), platform: r[0]||'', url: '', account: r[1]||'',
-        hint: r[2]||'', note: r[3]||'', category: r[4]||'其他',
-        emoji: '🔑', createdAt: r[5]||new Date().toISOString()
-      };
+    .map((r, i) => {
+      let entry;
+      if(isOldId){                                                           // format 1
+        entry = {
+          id: r[0]||uid(), platform: r[1]||'', url: '', account: r[2]||'',
+          hint: r[3]||'', note: r[4]||'', category: r[5]||'其他',
+          emoji: r[6]||'🔑', createdAt: r[7]||new Date().toISOString()
+        };
+      } else if(hasUrl && hasEmoji){                                         // format 4 ← current
+        entry = {
+          id: r[8]||uid(), platform: r[0]||'', url: r[1]||'', account: r[2]||'',
+          hint: r[3]||'', note: r[4]||'', category: r[5]||'其他',
+          emoji: r[6]||'🔑', createdAt: r[7]||new Date().toISOString()
+        };
+      } else if(hasUrl){                                                     // format 3 (legacy)
+        entry = {
+          id: uid(), platform: r[0]||'', url: r[1]||'', account: r[2]||'',
+          hint: r[3]||'', note: r[4]||'', category: r[5]||'其他',
+          emoji: '🔑', createdAt: r[6]||new Date().toISOString()
+        };
+      } else {                                                               // format 2 (legacy)
+        entry = {
+          id: uid(), platform: r[0]||'', url: '', account: r[1]||'',
+          hint: r[2]||'', note: r[3]||'', category: r[4]||'其他',
+          emoji: '🔑', createdAt: r[5]||new Date().toISOString()
+        };
+      }
+      console.log('[Echo] parseSheetRows row', i, '— platform:', entry.platform,
+        '| emoji:', entry.emoji, '| raw r[6]:', r[6]);
+      return entry;
     });
+  result._hasEmojiCol = hasEmoji;
+  return result;
 }
 
 async function loadFromSheets(email, providedToken = null){
@@ -1853,7 +1866,7 @@ async function saveToSheets(email, data, providedToken = null){
   const token = providedToken || await ensureToken();
   const { sheetId } = await ensureSheet(token);
   const rows = [SHEET_COLS, ...data.map(e=>[
-    e.platform, e.url||'', e.account, e.hint||'', e.note||'', e.category||'其他', e.emoji||'🔑', e.createdAt
+    e.platform, e.url||'', e.account, e.hint||'', e.note||'', e.category||'其他', e.emoji||'🔑', e.createdAt, e.id||uid()
   ])];
   await writeSheet(sheetId, token, rows);
 }
@@ -2003,12 +2016,19 @@ async function syncFromSheetsBackground(){
     ]);
 
     if(sheetEntries !== null){
-      const localTs   = getLocalLastModified();
-      const sheetsTs  = settings.lastModified;
-      console.log('[Echo] syncFromSheets: localTs =', localTs, '| sheetsTs =', sheetsTs);
+      const localTs        = getLocalLastModified();
+      const sheetsTs       = settings.lastModified;
+      const sheetsHasEmoji = sheetEntries._hasEmojiCol !== false;
+      console.log('[Echo] syncFromSheets: localTs =', localTs, '| sheetsTs =', sheetsTs,
+        '| sheetsHasEmoji =', sheetsHasEmoji);
 
-      if(sheetsTs === null){
-        // Old sheet with no lastModified — Sheets takes priority (legacy behaviour)
+      if(!sheetsHasEmoji){
+        // Sheets is old format (no emoji column) — always upload local to upgrade format
+        console.log('[Echo] syncFromSheets: Sheets has no emoji column → uploading local to upgrade format');
+        await saveToSheets(currentUser, entries, token);
+        await saveSettingsToSheets(getNick(), getLocalLastModified() || Date.now());
+      } else if(sheetsTs === null){
+        // Old sheet with emoji col but no lastModified — Sheets takes priority
         if(sheetEntries.length > 0){
           console.log('[Echo] syncFromSheets: no sheetsTs (legacy) → Sheets wins, downloading');
           entries = sheetEntries;
@@ -2052,7 +2072,7 @@ async function doSync(){
     // Sheet was just created — push local data and settings directly
     console.log('[Echo] doSync: new sheet — uploading', entries.length, 'entries (local → Sheets)');
     const uploadRows = [SHEET_COLS, ...entries.map(e=>[
-      e.platform, e.url||'', e.account, e.hint||'', e.note||'', e.category||'其他', e.emoji||'🔑', e.createdAt
+      e.platform, e.url||'', e.account, e.hint||'', e.note||'', e.category||'其他', e.emoji||'🔑', e.createdAt, e.id||uid()
     ])];
     await writeSheet(sheetId, token, uploadRows);
     const localTs = getLocalLastModified() || Date.now();
@@ -2064,13 +2084,18 @@ async function doSync(){
       loadFromSheets(currentUser),
       loadSettingsFromSheets(sheetId, token)
     ]);
-    const localTs  = getLocalLastModified();
-    const sheetsTs = settings.lastModified;
-    console.log('[Echo] doSync: localTs =', localTs, '| sheetsTs =', sheetsTs);
+    const localTs        = getLocalLastModified();
+    const sheetsTs       = settings.lastModified;
+    const sheetsHasEmoji = sheetEntries !== null && sheetEntries._hasEmojiCol !== false;
+    console.log('[Echo] doSync: localTs =', localTs, '| sheetsTs =', sheetsTs,
+      '| sheetsHasEmoji =', sheetsHasEmoji);
 
     if(sheetEntries !== null){
-      if(sheetsTs === null){
-        // Old sheet with no lastModified — Sheets takes priority (legacy)
+      if(!sheetsHasEmoji){
+        // Sheets is old format (no emoji column) — upload local to upgrade, don't download
+        console.log('[Echo] doSync: Sheets has no emoji column → uploading local to upgrade format');
+      } else if(sheetsTs === null){
+        // Sheets has emoji col but no lastModified — Sheets takes priority
         if(sheetEntries.length > 0){
           console.log('[Echo] doSync: no sheetsTs (legacy) → Sheets wins');
           entries = sheetEntries;
@@ -2095,7 +2120,9 @@ async function doSync(){
     console.log('[Echo] doSync: saved', entries.length, 'entries to Sheets');
 
     // Preserve whichever timestamp won; never advance it with Date.now()
-    const finalTs = localTs > (sheetsTs || 0) ? localTs : (sheetsTs || Date.now());
+    const finalTs = (!sheetsHasEmoji || localTs > (sheetsTs || 0))
+      ? (getLocalLastModified() || Date.now())
+      : (sheetsTs || Date.now());
 
     // Sync nickname: apply remote nick only when Sheets won
     const remoteNick = settings.nick;
