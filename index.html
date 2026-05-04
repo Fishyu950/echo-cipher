@@ -1083,7 +1083,7 @@ input, button, .poppins,
         <div class="profile-row-arrow"><span class="mi">chevron_right</span></div>
       </div>
     </div>
-    <div class="profile-version">Echo v1.1.1 build 20260504</div>
+    <div class="profile-version">Echo v1.1.2 build 20260504</div>
   </div>
   <div class="bottom-nav">
     <div class="nav-item" id="navHome2" onclick="switchNav('home')">
@@ -1984,6 +1984,8 @@ async function syncToSheetsBackground(){
   if(!token || !currentUser) return;
   try {
     await saveToSheets(currentUser, entries, token);
+    // Update Sheets lastModified so other devices know this device wrote at localTs
+    await saveSettingsToSheets(getNick(), getLocalLastModified() || Date.now());
     showToast('已同步至 Google Sheets', 'success');
     document.getElementById('profileMeta').textContent = '已連結 Google Sheets';
   } catch(e){ /* silent */ }
@@ -2013,17 +2015,16 @@ async function syncFromSheetsBackground(){
           saveUserData(currentUser, entries);
           renderList();
         }
-      } else if(localTs >= sheetsTs){
-        // Local is newer or same — push local to Sheets
-        console.log('[Echo] syncFromSheets: local newer or equal → uploading to Sheets');
+      } else if(localTs > sheetsTs){
+        // Local is strictly newer — push local to Sheets
+        console.log('[Echo] syncFromSheets: local newer → uploading to Sheets');
         await saveToSheets(currentUser, entries, token);
         await saveSettingsToSheets(getNick(), localTs);
       } else {
-        // Sheets is newer — pull from Sheets
-        console.log('[Echo] syncFromSheets: Sheets newer → downloading to local');
+        // Sheets is newer or same — pull from Sheets (don't touch echoLastModified)
+        console.log('[Echo] syncFromSheets: Sheets newer or equal → downloading to local');
         entries = sheetEntries;
         saveUserData(currentUser, entries);
-        localStorage.setItem(LAST_MODIFIED_LSKEY + currentUser, String(sheetsTs));
         renderList();
       }
     }
@@ -2078,27 +2079,27 @@ async function doSync(){
         } else {
           console.log('[Echo] doSync: no sheetsTs + Sheets empty → keeping local');
         }
-      } else if(localTs >= sheetsTs){
-        console.log('[Echo] doSync: local newer or equal → uploading to Sheets');
+      } else if(localTs > sheetsTs){
+        console.log('[Echo] doSync: local strictly newer → uploading to Sheets');
         // will upload below
       } else {
-        console.log('[Echo] doSync: Sheets newer → downloading to local');
+        // sheetsTs >= localTs — Sheets wins (don't touch echoLastModified)
+        console.log('[Echo] doSync: Sheets newer or equal → downloading to local');
         entries = sheetEntries;
         saveUserData(currentUser, entries);
-        localStorage.setItem(LAST_MODIFIED_LSKEY + currentUser, String(sheetsTs));
         renderList();
       }
     }
 
-    // Write current state (whichever won) back to Sheets with updated timestamp
-    const finalTs = Math.max(localTs, sheetsTs || 0, Date.now());
     await saveToSheets(currentUser, entries);
     console.log('[Echo] doSync: saved', entries.length, 'entries to Sheets');
 
-    // Sync nickname
-    const nick = getNick();
+    // Preserve whichever timestamp won; never advance it with Date.now()
+    const finalTs = localTs > (sheetsTs || 0) ? localTs : (sheetsTs || Date.now());
+
+    // Sync nickname: apply remote nick only when Sheets won
     const remoteNick = settings.nick;
-    if(remoteNick && sheetsTs !== null && (sheetsTs > localTs)){
+    if(remoteNick && sheetsTs !== null && sheetsTs >= localTs){
       const def = currentUser.includes('@') ? currentUser.split('@')[0] : currentUser;
       if(remoteNick !== (localStorage.getItem(NICK_KEY + currentUser) || def)) applyNick(remoteNick);
     }
