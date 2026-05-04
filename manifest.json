@@ -1,0 +1,9 @@
+{
+  "name": "Echo",
+  "short_name": "Echo",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#FAF7F2",
+  "theme_color": "#E59A2D",
+  "icons": [{"src": "apple-touch-icon.png", "sizes": "180x180", "type": "image/png"}]
+}
