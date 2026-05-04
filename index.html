@@ -687,27 +687,27 @@ input, button, .poppins,
 .return-dot { width:8px; height:8px; border-radius:50%; background:var(--primary); flex-shrink:0; }
 
 /* PIN */
-#setPinScreen,#confirmPinScreen,#enterPinScreen,#forgotPinScreen { background:var(--bg); align-items:center; justify-content:center; padding:48px 28px; }
-.pin-header { text-align:center; margin-bottom:28px; }
-.pin-icon-wrap { width:64px; height:64px; border-radius:20px; background:var(--primary-bg); border:2px solid rgba(245,166,35,0.3); display:flex; align-items:center; justify-content:center; margin:0 auto 16px; }
+#setPinScreen,#confirmPinScreen,#enterPinScreen,#forgotPinScreen { background:var(--bg); align-items:center; justify-content:center; padding:32px 28px; }
+.pin-header { text-align:center; margin-bottom:18px; }
+.pin-icon-wrap { width:64px; height:64px; border-radius:50%; overflow:hidden; background:var(--primary-bg); border:2px solid rgba(245,166,35,0.3); display:flex; align-items:center; justify-content:center; margin:0 auto 16px; }
 .pin-icon-wrap .mi { font-size:30px; color:var(--primary-dark); }
 .pin-title { font-family:'Poppins',sans-serif; font-size:22px; font-weight:700; color:var(--ink); margin-bottom:6px; }
 .pin-sub { font-size:13px; color:var(--ink3); line-height:1.6; }
-.pin-user-badge { display:inline-flex; align-items:center; gap:6px; background:var(--white); border:1.5px solid var(--border); border-radius:50px; padding:6px 14px; margin-bottom:32px; box-shadow:var(--shadow-sm); }
+.pin-user-badge { display:inline-flex; align-items:center; gap:6px; background:var(--white); border:1.5px solid var(--border); border-radius:50px; padding:6px 14px; margin-bottom:20px; box-shadow:var(--shadow-sm); }
 .pin-user-badge .mi { font-size:16px; color:var(--ink3); }
 .pin-user-name { font-family:'Poppins',sans-serif; font-size:13px; font-weight:500; color:var(--ink2); }
-.pin-dots { display:flex; gap:16px; justify-content:center; margin-bottom:12px; }
+.pin-dots { display:flex; gap:16px; justify-content:center; margin-bottom:8px; }
 .pin-dot { width:18px; height:18px; border-radius:50%; border:2px solid var(--border); background:var(--white); transition:all 0.15s; }
 .pin-dot.filled { background:var(--primary); border-color:var(--primary); transform:scale(1.1); }
 .pin-dot.error { background:#b85a5a; border-color:#b85a5a; animation:shake 0.3s; }
-.pin-err { font-size:13px; color:#b85a5a; min-height:20px; text-align:center; margin-bottom:20px; font-family:'Poppins',sans-serif; }
-.pin-keypad { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; width:100%; max-width:280px; margin:0 auto; }
+.pin-err { font-size:13px; color:#b85a5a; min-height:20px; text-align:center; margin-bottom:10px; font-family:'Poppins',sans-serif; }
+.pin-keypad { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; width:100%; max-width:240px; margin:0 auto; }
 .pin-key { aspect-ratio:1; border-radius:50%; background:var(--white); border:1.5px solid var(--border); display:flex; align-items:center; justify-content:center; font-family:'Poppins',sans-serif; font-size:22px; font-weight:600; color:var(--ink); cursor:pointer; transition:all 0.15s; box-shadow:var(--shadow-sm); user-select:none; }
 .pin-key:active { background:var(--primary-bg); border-color:var(--primary); transform:scale(0.93); }
 .pin-key.del { background:none; border:none; box-shadow:none; }
 .pin-key.del .mi { font-size:24px; color:var(--ink3); }
 .pin-key.empty { background:none; border:none; box-shadow:none; cursor:default; }
-.pin-forgot { text-align:center; margin-top:24px; }
+.pin-forgot { text-align:center; margin-top:12px; }
 .pin-forgot-btn { background:none; border:none; font-family:'Poppins',sans-serif; font-size:13px; color:var(--ink3); cursor:pointer; text-decoration:underline; text-underline-offset:3px; }
 
 /* FORGOT */
@@ -734,11 +734,11 @@ input, button, .poppins,
 .toast.error { background:#b85a5a; }
 .sync-hint {
   display:flex; align-items:center; gap:10px;
-  background:#FFF9E6; border-radius:var(--radius-lg);
+  background:#FFF9E6; border-radius:999px;
   border:1px solid #f0d090;
   color:var(--primary-dark); font-family:'Poppins','Noto Sans TC',sans-serif;
   font-size:13px; font-weight:500;
-  padding:14px 16px; margin:12px 20px 0;
+  padding:14px 16px; margin:12px 20px 12px;
   cursor:pointer; user-select:none;
   box-shadow:0 2px 8px rgba(245,166,35,0.10);
 }
@@ -1325,6 +1325,8 @@ function getTokenIfValid(){
 
 // Shared post-auth PIN routing (used by both popup and redirect flows)
 function proceedToPinAfterAuth(email, token){
+  currentUser = email; // Set early so ensureSheet can use it (currentUser must not be null)
+  console.log('[Echo] proceedToPinAfterAuth: email =', email, '| currentUser =', currentUser);
   if(token) ensureSheet(token).then(({sheetId}) => console.log('[Echo] sheet ready:', sheetId)).catch(e => console.warn('[Echo] sheet init error:', e));
   pendingUser = email;
   ['setPinUserName','confirmPinUserName','enterPinUserName'].forEach(id=>{
@@ -1375,16 +1377,17 @@ async function googleLogin(){
     alert('尚未設定 Google Client ID\n\n請參閱說明，在 Google Cloud Console 建立 OAuth 用戶端並填入 GOOGLE_CLIENT_ID');
     return;
   }
-  // iOS Safari PWA standalone mode — popups are blocked, use redirect flow instead
+  // iOS Safari PWA standalone mode — open Safari tab for OAuth (redirect causes redirect_uri_mismatch; popup blocked in PWA)
   if(window.navigator.standalone){
-    const scope = 'https://www.googleapis.com/auth/drive.file email profile';
-    const redirectUri = window.location.origin + window.location.pathname;
-    window.location.href = 'https://accounts.google.com/o/oauth2/v2/auth'
-      + '?client_id=' + encodeURIComponent(GOOGLE_CLIENT_ID)
-      + '&redirect_uri=' + encodeURIComponent(redirectUri)
-      + '&response_type=token'
-      + '&scope=' + encodeURIComponent(scope)
-      + '&prompt=select_account';
+    window.onOAuthResult = function(email, token, picture){
+      window.onOAuthResult = null;
+      if(token){ accessToken = token; tokenExpiry = Date.now() + 3540 * 1000; }
+      if(picture) localStorage.setItem(AVATAR_KEY + email, picture);
+      proceedToPinAfterAuth(email, token);
+    };
+    const url = location.protocol + '//' + location.host + location.pathname + '?echo_oauth=1';
+    const w = window.open(url, '_blank');
+    if(!w) showToast('請允許開啟瀏覽器視窗以完成登入', 'error');
     return;
   }
   if(!googleTokenClient){ showToast('Google 登入初始化中，請稍後', 'error'); return; }
@@ -2058,6 +2061,7 @@ function deleteEntry(){
 // ── LOGIN SUCCESS ──
 function loginSuccess(user){
   currentUser=user;
+  console.log('[Echo] loginSuccess: user =', user, '| localStorage USER_KEY =', localStorage.getItem(USER_KEY));
   entries=getUserData(user);
   const defaultNick = user.includes('@') ? user.split('@')[0] : user;
   const nick = localStorage.getItem(NICK_KEY + user) || defaultNick;
@@ -2205,7 +2209,61 @@ function runIntroAnimation(){
   initCatScrollDrag();
   initScrollTop();
 
-  // iOS PWA standalone: handle OAuth redirect token in URL hash
+  // OAuth helper mode: this page was opened by the PWA in Safari to handle Google auth
+  if(new URLSearchParams(location.search).has('echo_oauth')){
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.body.insertAdjacentHTML('beforeend', `
+      <div id="oauthHelper" style="position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px;z-index:999;text-align:center">
+        <div style="width:72px;height:72px;border-radius:50%;background:var(--primary);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;box-shadow:0 8px 24px rgba(245,166,35,0.4)">
+          <span class="mi" style="font-size:34px;color:white">lock</span>
+        </div>
+        <div style="font-family:'Fugaz One',sans-serif;font-size:28px;color:var(--ink);letter-spacing:0.05em;margin-bottom:6px">Echo</div>
+        <div style="font-family:'Noto Sans TC',sans-serif;font-size:13px;color:var(--ink3);margin-bottom:36px">連結你的 Google 帳號</div>
+        <button id="oauthBtn" onclick="startOAuthInHelper()" style="width:100%;max-width:280px;padding:16px;background:var(--primary);border:none;border-radius:var(--radius-md);font-family:'Poppins',sans-serif;font-size:15px;font-weight:700;color:white;cursor:pointer;box-shadow:0 4px 16px rgba(245,166,35,0.35)">使用 Google 帳號連結</button>
+      </div>`);
+    window.startOAuthInHelper = async function(){
+      const btn = document.getElementById('oauthBtn');
+      btn.disabled = true; btn.textContent = '授權中…';
+      let waited = 0;
+      while(!googleTokenClient && waited < 6000){ await new Promise(r=>setTimeout(r,200)); waited+=200; }
+      if(!googleTokenClient){ btn.disabled=false; btn.textContent='使用 Google 帳號連結'; showToast('初始化失敗，請重試','error'); return; }
+      try {
+        const token = await requestToken('select_account');
+        const resp = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers: { Authorization: 'Bearer '+token } });
+        const info = await resp.json();
+        if(!info.email) throw new Error('no email');
+        if(info.picture) localStorage.setItem(AVATAR_KEY + info.email, info.picture);
+        if(window.opener && window.opener.onOAuthResult){
+          window.opener.onOAuthResult(info.email, token, info.picture || null);
+        } else {
+          localStorage.setItem('echo_pending_oauth', JSON.stringify({ email: info.email, token, ts: Date.now() }));
+        }
+        document.getElementById('oauthHelper').innerHTML = '<div style="padding:40px"><div style="font-size:48px;margin-bottom:16px">✓</div><div style="font-family:\'Poppins\',sans-serif;font-size:20px;font-weight:700;color:var(--ink);margin-bottom:8px">授權成功！</div><div style="font-family:\'Noto Sans TC\',sans-serif;font-size:13px;color:var(--ink3)">請返回 Echo APP</div></div>';
+        setTimeout(()=>window.close(), 3000);
+      } catch(e){
+        btn.disabled=false; btn.textContent='使用 Google 帳號連結';
+        showToast('授權失敗，請重試','error');
+      }
+    };
+    return;
+  }
+
+  // Handle return from Safari OAuth tab (fallback when window.opener is unavailable)
+  window.addEventListener('visibilitychange', ()=>{
+    if(document.visibilityState !== 'visible') return;
+    const pending = localStorage.getItem('echo_pending_oauth');
+    if(!pending) return;
+    localStorage.removeItem('echo_pending_oauth');
+    try {
+      const { email, token, ts } = JSON.parse(pending);
+      if(Date.now() - ts < 300000 && email && token){
+        accessToken = token; tokenExpiry = Date.now() + 3540 * 1000;
+        proceedToPinAfterAuth(email, token);
+      }
+    } catch {}
+  });
+
+  // iOS PWA standalone: handle OAuth redirect token in URL hash (legacy fallback)
   if(window.location.hash.includes('access_token')){
     handleOAuthRedirect().then(ok => {
       if(!ok){
