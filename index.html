@@ -1088,7 +1088,7 @@ input, button, .poppins,
         <div class="profile-row-arrow"><span class="mi">chevron_right</span></div>
       </div>
     </div>
-    <div class="profile-version">Echo v1.1.6 build 20260505</div>
+    <div class="profile-version">Echo v1.1.7 build 20260505</div>
   </div>
   <div class="bottom-nav">
     <div class="nav-item" id="navHome2" onclick="switchNav('home')">
@@ -1140,6 +1140,7 @@ const SHEET_COLS = ['平台','網址','帳號','暗號','備註','分類','emoji
 let currentUser=null, entries=[], editingId=null, detailId=null;
 let selectedCat='其他', selectedEmoji='🔑', activeCatFilter='全部';
 let currentPage=1, filteredCache=[];
+let navPage=0; // 0 = mainScreen, 1 = profileScreen
 let currentPin='', setPinFirst='', pendingUser=null, forgotPinMode=false;
 let googleTokenClient=null, accessToken=null, tokenExpiry=0;
 
@@ -1189,18 +1190,20 @@ function applyScreenAnim(id, cls){
 }
 
 function switchNav(tab, anim){
-  // Layout: [Home] [Profile] — profile is RIGHT of home
-  // home→profile: swipe right, profile enters from right (echo-slide-right)
-  // profile→home: swipe left,  home enters from left    (echo-slide-left)
+  // Layout: [Home(0)] [Profile(1)]
+  // home→profile: profile enters from right (echo-slide-right)
+  // profile→home: home enters from left    (echo-slide-left)
   const fromProfile = document.getElementById('profileScreen').classList.contains('active');
   const fromHome    = document.getElementById('mainScreen').classList.contains('active');
   if(tab==='home'){
+    navPage = 0;
     showScreen('mainScreen'); renderList();
     const cls = anim !== undefined ? anim : (fromProfile ? 'echo-slide-left' : null);
     if(cls) applyScreenAnim('mainScreen', cls);
     document.getElementById('navHome').classList.add('active');
     document.getElementById('navProfile').classList.remove('active');
   } else {
+    navPage = 1;
     showProfile();
     const cls = anim !== undefined ? anim : (fromHome ? 'echo-slide-right' : null);
     if(cls) applyScreenAnim('profileScreen', cls);
@@ -1210,85 +1213,31 @@ function switchNav(tab, anim){
 }
 
 function initSwipeNav(){
-  let startX = 0, startY = 0, startTime = 0;
-  let isBoundaryDrag = false, boundaryScreenId = null;
-
-  function getSwipeScreen(){
-    for(const id of ['mainScreen','profileScreen','detailScreen','editScreen']){
-      if(document.getElementById(id).classList.contains('active')) return id;
-    }
-    return null;
-  }
-
-  function snapBack(id){
-    const el = document.getElementById(id);
-    el.style.transition = 'transform 0.25s ease-out';
-    el.style.transform = 'translateX(0)';
-    el.addEventListener('transitionend', () => { el.style.transition = ''; el.style.transform = ''; }, { once: true });
-  }
+  let startX = 0, startY = 0;
 
   document.addEventListener('touchstart', e => {
     startX = e.touches[0].clientX;
     startY = e.touches[0].clientY;
-    startTime = Date.now();
-    isBoundaryDrag = false;
-    boundaryScreenId = null;
   }, { passive: true });
 
-  // passive:false so we can preventDefault() during boundary drags to block scroll
-  document.addEventListener('touchmove', e => {
-    const dx = e.touches[0].clientX - startX;
-    const dy = e.touches[0].clientY - startY;
-    if(Math.abs(dx) < 5 || Math.abs(dy) > Math.abs(dx) * 1.5) return;
-
-    const screen = getSwipeScreen();
-    if(!screen) return;
-
-    // Boundary: main going left (no page left of home), profile going right (no page right of profile)
-    const isBoundary = (screen === 'mainScreen' && dx < 0) || (screen === 'profileScreen' && dx > 0);
-
-    if(isBoundary){
-      e.preventDefault();
-      isBoundaryDrag = true;
-      boundaryScreenId = screen;
-      const el = document.getElementById(screen);
-      el.style.transition = '';
-      el.style.transform = `translateX(${Math.sign(dx) * Math.min(Math.abs(dx) * 0.4, 40)}px)`;
-    } else if(isBoundaryDrag){
-      // Direction reversed away from boundary — reset immediately
-      const el = document.getElementById(boundaryScreenId);
-      el.style.transition = '';
-      el.style.transform = '';
-      isBoundaryDrag = false;
-      boundaryScreenId = null;
-    }
-  }, { passive: false });
-
   document.addEventListener('touchend', e => {
-    if(isBoundaryDrag && boundaryScreenId){
-      snapBack(boundaryScreenId);
-      isBoundaryDrag = false; boundaryScreenId = null;
-      return;
-    }
+    // Only active on the two tab pages
+    const onMain    = document.getElementById('mainScreen').classList.contains('active');
+    const onProfile = document.getElementById('profileScreen').classList.contains('active');
+    if(!onMain && !onProfile) return;
 
     const dx = e.changedTouches[0].clientX - startX;
     const dy = e.changedTouches[0].clientY - startY;
-    const velocity = Math.abs(dx) / Math.max(Date.now() - startTime, 1);
 
-    if(Math.abs(dy) > Math.abs(dx) * 1.5) return;                 // too vertical
-    if(Math.abs(dx) < 30 && velocity <= 0.3) return;              // too small & slow
+    if(Math.abs(dy) > Math.abs(dx)) return;  // more vertical than horizontal → ignore
+    if(Math.abs(dx) < 30) return;            // too short → ignore
 
-    const screen = getSwipeScreen();
-    if(!screen) return;
-
-    // Layout: [Home] [Profile]  detail/edit stack pushes right
-    if     (screen === 'mainScreen'    && dx > 0) switchNav('profile');
-    else if(screen === 'profileScreen' && dx < 0) switchNav('home');
-    else if(screen === 'detailScreen'  && dx > 0) switchNav('home', 'echo-slide-left');
-    else if(screen === 'editScreen'    && dx > 0){
-      if(editingId){ showScreen('detailScreen'); applyScreenAnim('detailScreen', 'echo-slide-left'); }
-      else           switchNav('home', 'echo-slide-left');
-    }
+    // navPage 0 = Home, 1 = Profile
+    // swipe left (dx<0) on home  → profile
+    // swipe right (dx>0) on profile → home
+    // all other directions → boundary, do nothing
+    if(navPage === 0 && dx < 0)      switchNav('profile');
+    else if(navPage === 1 && dx > 0) switchNav('home');
   }, { passive: true });
 }
 
