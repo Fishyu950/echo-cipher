@@ -104,8 +104,8 @@ input, button, .poppins,
 .screen.active { display:flex; }
 @keyframes echoSlideInRight { from { transform:translateX(28%); opacity:0; } to { transform:translateX(0); opacity:1; } }
 @keyframes echoSlideInLeft  { from { transform:translateX(-28%); opacity:0; } to { transform:translateX(0); opacity:1; } }
-.screen.echo-slide-right { animation: echoSlideInRight 0.22s ease-out; }
-.screen.echo-slide-left  { animation: echoSlideInLeft  0.22s ease-out; }
+.screen.echo-slide-right { animation: echoSlideInRight 0.25s ease-out; }
+.screen.echo-slide-left  { animation: echoSlideInLeft  0.25s ease-out; }
 
 /* ════ LOGIN ════ */
 #loginScreen {
@@ -1088,7 +1088,7 @@ input, button, .poppins,
         <div class="profile-row-arrow"><span class="mi">chevron_right</span></div>
       </div>
     </div>
-    <div class="profile-version">Echo v1.1.4 build 20260504</div>
+    <div class="profile-version">Echo v1.1.5 build 20260505</div>
   </div>
   <div class="bottom-nav">
     <div class="nav-item" id="navHome2" onclick="switchNav('home')">
@@ -1188,36 +1188,107 @@ function applyScreenAnim(id, cls){
   el.addEventListener('animationend', () => el.classList.remove(cls), { once: true });
 }
 
-function switchNav(tab){
+function switchNav(tab, anim){
+  // Layout: [Profile] [Home]  — profile is LEFT of home
+  // home→profile: swipe left, profile enters from left  (echo-slide-left)
+  // profile→home: swipe right, home enters from right   (echo-slide-right)
   const fromProfile = document.getElementById('profileScreen').classList.contains('active');
   const fromHome    = document.getElementById('mainScreen').classList.contains('active');
   if(tab==='home'){
     showScreen('mainScreen'); renderList();
-    if(fromProfile) applyScreenAnim('mainScreen', 'echo-slide-left');
+    const cls = anim !== undefined ? anim : (fromProfile ? 'echo-slide-right' : null);
+    if(cls) applyScreenAnim('mainScreen', cls);
     document.getElementById('navHome').classList.add('active');
     document.getElementById('navProfile').classList.remove('active');
   } else {
     showProfile();
-    if(fromHome) applyScreenAnim('profileScreen', 'echo-slide-right');
+    const cls = anim !== undefined ? anim : (fromHome ? 'echo-slide-left' : null);
+    if(cls) applyScreenAnim('profileScreen', cls);
     document.getElementById('navHome').classList.remove('active');
     document.getElementById('navProfile').classList.add('active');
   }
 }
 
 function initSwipeNav(){
-  let startX = 0, startY = 0;
+  let startX = 0, startY = 0, startTime = 0;
+  let isBoundaryDrag = false, boundaryScreenId = null;
+
+  function getSwipeScreen(){
+    for(const id of ['mainScreen','profileScreen','detailScreen','editScreen']){
+      if(document.getElementById(id).classList.contains('active')) return id;
+    }
+    return null;
+  }
+
+  function snapBack(id){
+    const el = document.getElementById(id);
+    el.style.transition = 'transform 0.25s ease-out';
+    el.style.transform = 'translateX(0)';
+    el.addEventListener('transitionend', () => { el.style.transition = ''; el.style.transform = ''; }, { once: true });
+  }
+
   document.addEventListener('touchstart', e => {
     startX = e.touches[0].clientX;
     startY = e.touches[0].clientY;
+    startTime = Date.now();
+    isBoundaryDrag = false;
+    boundaryScreenId = null;
   }, { passive: true });
+
+  // passive:false so we can preventDefault() during boundary drags to block scroll
+  document.addEventListener('touchmove', e => {
+    const dx = e.touches[0].clientX - startX;
+    const dy = e.touches[0].clientY - startY;
+    if(Math.abs(dx) < 5 || Math.abs(dy) > Math.abs(dx) * 1.5) return;
+
+    const screen = getSwipeScreen();
+    if(!screen) return;
+
+    // Boundary: main going right (no page), profile going left (no page)
+    const isBoundary = (screen === 'mainScreen' && dx > 0) || (screen === 'profileScreen' && dx < 0);
+
+    if(isBoundary){
+      e.preventDefault();
+      isBoundaryDrag = true;
+      boundaryScreenId = screen;
+      const el = document.getElementById(screen);
+      el.style.transition = '';
+      el.style.transform = `translateX(${Math.sign(dx) * Math.min(Math.abs(dx) * 0.4, 40)}px)`;
+    } else if(isBoundaryDrag){
+      // Direction reversed away from boundary — reset immediately
+      const el = document.getElementById(boundaryScreenId);
+      el.style.transition = '';
+      el.style.transform = '';
+      isBoundaryDrag = false;
+      boundaryScreenId = null;
+    }
+  }, { passive: false });
+
   document.addEventListener('touchend', e => {
+    if(isBoundaryDrag && boundaryScreenId){
+      snapBack(boundaryScreenId);
+      isBoundaryDrag = false; boundaryScreenId = null;
+      return;
+    }
+
     const dx = e.changedTouches[0].clientX - startX;
     const dy = e.changedTouches[0].clientY - startY;
-    if(Math.abs(dx) < 50 || Math.abs(dy) > Math.abs(dx)) return;
-    const mainActive    = document.getElementById('mainScreen').classList.contains('active');
-    const profileActive = document.getElementById('profileScreen').classList.contains('active');
-    if(mainActive && dx > 0)    switchNav('profile');
-    else if(profileActive && dx < 0) switchNav('home');
+    const velocity = Math.abs(dx) / Math.max(Date.now() - startTime, 1);
+
+    if(Math.abs(dy) > Math.abs(dx) * 1.5) return;                 // too vertical
+    if(Math.abs(dx) < 30 && velocity <= 0.3) return;              // too small & slow
+
+    const screen = getSwipeScreen();
+    if(!screen) return;
+
+    // Layout: [Profile] [Home] [Detail/Edit stack →]
+    if     (screen === 'mainScreen'    && dx < 0) switchNav('profile');
+    else if(screen === 'profileScreen' && dx > 0) switchNav('home');
+    else if(screen === 'detailScreen'  && dx > 0) switchNav('home', 'echo-slide-left');
+    else if(screen === 'editScreen'    && dx > 0){
+      if(editingId){ showScreen('detailScreen'); applyScreenAnim('detailScreen', 'echo-slide-left'); }
+      else           switchNav('home', 'echo-slide-left');
+    }
   }, { passive: true });
 }
 
