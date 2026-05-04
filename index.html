@@ -1088,7 +1088,7 @@ input, button, .poppins,
         <div class="profile-row-arrow"><span class="mi">chevron_right</span></div>
       </div>
     </div>
-    <div class="profile-version">Echo v1.1.5 build 20260505</div>
+    <div class="profile-version">Echo v1.1.6 build 20260505</div>
   </div>
   <div class="bottom-nav">
     <div class="nav-item" id="navHome2" onclick="switchNav('home')">
@@ -1189,20 +1189,20 @@ function applyScreenAnim(id, cls){
 }
 
 function switchNav(tab, anim){
-  // Layout: [Profile] [Home]  — profile is LEFT of home
-  // home→profile: swipe left, profile enters from left  (echo-slide-left)
-  // profile→home: swipe right, home enters from right   (echo-slide-right)
+  // Layout: [Home] [Profile] — profile is RIGHT of home
+  // home→profile: swipe right, profile enters from right (echo-slide-right)
+  // profile→home: swipe left,  home enters from left    (echo-slide-left)
   const fromProfile = document.getElementById('profileScreen').classList.contains('active');
   const fromHome    = document.getElementById('mainScreen').classList.contains('active');
   if(tab==='home'){
     showScreen('mainScreen'); renderList();
-    const cls = anim !== undefined ? anim : (fromProfile ? 'echo-slide-right' : null);
+    const cls = anim !== undefined ? anim : (fromProfile ? 'echo-slide-left' : null);
     if(cls) applyScreenAnim('mainScreen', cls);
     document.getElementById('navHome').classList.add('active');
     document.getElementById('navProfile').classList.remove('active');
   } else {
     showProfile();
-    const cls = anim !== undefined ? anim : (fromHome ? 'echo-slide-left' : null);
+    const cls = anim !== undefined ? anim : (fromHome ? 'echo-slide-right' : null);
     if(cls) applyScreenAnim('profileScreen', cls);
     document.getElementById('navHome').classList.remove('active');
     document.getElementById('navProfile').classList.add('active');
@@ -1244,8 +1244,8 @@ function initSwipeNav(){
     const screen = getSwipeScreen();
     if(!screen) return;
 
-    // Boundary: main going right (no page), profile going left (no page)
-    const isBoundary = (screen === 'mainScreen' && dx > 0) || (screen === 'profileScreen' && dx < 0);
+    // Boundary: main going left (no page left of home), profile going right (no page right of profile)
+    const isBoundary = (screen === 'mainScreen' && dx < 0) || (screen === 'profileScreen' && dx > 0);
 
     if(isBoundary){
       e.preventDefault();
@@ -1281,9 +1281,9 @@ function initSwipeNav(){
     const screen = getSwipeScreen();
     if(!screen) return;
 
-    // Layout: [Profile] [Home] [Detail/Edit stack →]
-    if     (screen === 'mainScreen'    && dx < 0) switchNav('profile');
-    else if(screen === 'profileScreen' && dx > 0) switchNav('home');
+    // Layout: [Home] [Profile]  detail/edit stack pushes right
+    if     (screen === 'mainScreen'    && dx > 0) switchNav('profile');
+    else if(screen === 'profileScreen' && dx < 0) switchNav('home');
     else if(screen === 'detailScreen'  && dx > 0) switchNav('home', 'echo-slide-left');
     else if(screen === 'editScreen'    && dx > 0){
       if(editingId){ showScreen('detailScreen'); applyScreenAnim('detailScreen', 'echo-slide-left'); }

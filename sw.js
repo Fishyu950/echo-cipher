@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'echo-v1.1.5';
+const CACHE_VERSION = 'echo-v1.1.6';
 const CACHE_FILES = ['./index.html', './apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
