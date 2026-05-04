@@ -653,10 +653,11 @@ input, button, .poppins,
   position:absolute; left:50%; top:40%;
   transform:translate(-50%,-50%) scale(.4); opacity:0;
   pointer-events:none; z-index:15; will-change:transform,opacity;
+  width:64px; height:64px; border-radius:50%; overflow:hidden;
+  box-shadow:0 8px 28px rgba(245,166,35,0.42);
 }
 .lock-logo {
-  width:64px; height:64px; border-radius:50%; display:block;
-  box-shadow:0 8px 28px rgba(245,166,35,0.42);
+  width:64px; height:64px; display:block;
 }
 /* surrounding icons (stage 3-4) */
 .intro-si {
@@ -1077,7 +1078,7 @@ input, button, .poppins,
         <div class="profile-row-arrow"><span class="mi">chevron_right</span></div>
       </div>
     </div>
-    <div class="profile-version">Echo v1.0.4 build 20260504</div>
+    <div class="profile-version">Echo v1.0.6 build 20260504</div>
   </div>
   <div class="bottom-nav">
     <div class="nav-item" id="navHome2" onclick="switchNav('home')">
@@ -1611,13 +1612,34 @@ async function ensureSheet(token){
     }
   }
 
-  // Step 3: Nothing found — create new spreadsheet in Drive root
+  // Step 3: Nothing found — create new spreadsheet, then restore local backup
   let isNew = false;
   if(!sheetId){
-    console.log('[Echo] ensureSheet: no sheet found anywhere — creating new...');
+    // 3a. Snapshot localStorage BEFORE any network calls — this is the source of truth
+    const localBackup = getUserData(currentUser);
+    console.log('[Echo] ensureSheet: [REBUILD] step 1 — local backup snapshot:', localBackup.length, 'entries');
+
+    // 3b. Create the new empty spreadsheet structure
+    console.log('[Echo] ensureSheet: [REBUILD] step 2 — creating new spreadsheet...');
     sheetId = await createSpreadsheet(token);
     isNew = true;
-    console.log('[Echo] ensureSheet: created new sheet:', sheetId);
+    console.log('[Echo] ensureSheet: [REBUILD] step 2 done — new sheetId =', sheetId);
+
+    // 3c. Write backup to new sheet immediately (direction is always localStorage → Sheets, never reversed)
+    const backupRows = [SHEET_COLS, ...localBackup.map(e=>[
+      e.platform, e.url||'', e.account, e.hint||'', e.note||'', e.category||'其他', e.createdAt
+    ])];
+    console.log('[Echo] ensureSheet: [REBUILD] step 3 — writing', localBackup.length, 'entries to new sheet...');
+    await writeSheet(sheetId, token, backupRows);
+    console.log('[Echo] ensureSheet: [REBUILD] step 3 done — sheet now contains', localBackup.length, 'data rows');
+
+    // 3d. Notify user
+    if(localBackup.length > 0){
+      showToast('資料已自動還原至新試算表', 'success');
+      console.log('[Echo] ensureSheet: [REBUILD] complete — restored', localBackup.length, 'entries');
+    } else {
+      console.log('[Echo] ensureSheet: [REBUILD] complete — new sheet created (no local data to restore)');
+    }
   } else {
     await ensureSettingsSheet(sheetId, token);
   }
@@ -1667,19 +1689,18 @@ async function createSpreadsheet(token){
   console.log('[Echo] createSpreadsheet: batchUpdate response =', JSON.stringify(batchData, null, 2));
   if(!batchResp.ok) throw new Error('batchUpdate:' + batchResp.status + ' ' + JSON.stringify(batchData.error));
 
-  // Step 4: Save ID to localStorage, then write column headers
+  // Step 4: Save ID to localStorage (data written by ensureSheet caller, not here)
   localStorage.setItem(SHEET_ID_KEY + currentUser, spreadsheetId);
-  console.log('[Echo] createSpreadsheet: writing headers to', SHEET_NAME, '— cols:', SHEET_COLS);
-  await writeSheet(spreadsheetId, token, [SHEET_COLS]);
   console.log('[Echo] createSpreadsheet: SUCCESS — id =', spreadsheetId);
   return spreadsheetId;
 }
 
 async function writeSheet(sheetId, token, rows){
-  await fetch(
+  const clearResp = await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(SHEET_NAME)}:clear`,
     { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: '{}' }
   );
+  if(!clearResp.ok) throw new Error('clear:'+clearResp.status);
   const resp = await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${SHEET_NAME}!A1?valueInputOption=RAW`,
     {
@@ -1886,10 +1907,12 @@ async function doSync(){
     // Existing sheet — Sheets is source of truth
     const sheetEntries = await loadFromSheets(currentUser);
     console.log('[Echo] doSync: loaded', sheetEntries ? sheetEntries.length : 'null', 'entries from Sheets');
-    if(sheetEntries !== null){
+    if(sheetEntries !== null && sheetEntries.length > 0){
       entries = sheetEntries;
       saveUserData(currentUser, entries);
       renderList();
+    } else if(sheetEntries !== null && sheetEntries.length === 0){
+      console.log('[Echo] doSync: Sheets empty — keeping local data, uploading to Sheets');
     }
     await saveToSheets(currentUser, entries);
     console.log('[Echo] doSync: saved', entries.length, 'entries to Sheets');
@@ -2084,6 +2107,7 @@ function openEdit(id){
     selectedCat='其他'; selectedEmoji='🔑';
   }
   buildEmojiGrid(); buildCatSelect(); showScreen('editScreen');
+  history.pushState({echo:'edit'}, '');
 }
 
 function saveEntry(){
@@ -2093,6 +2117,10 @@ function saveEntry(){
   const hint=document.getElementById('fHint').value.trim();
   const note=document.getElementById('fNote').value.trim();
   if(!platform||!account){alert('請填寫平台名稱和帳號');return;}
+  if(!editingId){
+    const dup=entries.some(e=>e.platform.toLowerCase()===platform.toLowerCase());
+    if(dup&&!confirm(`已有相同平台名稱「${platform}」的記錄，確定要繼續新增嗎？`))return;
+  }
   if(editingId){
     const idx=entries.findIndex(e=>e.id===editingId);
     entries[idx]={...entries[idx],platform,url,account,hint,note,category:selectedCat,emoji:selectedEmoji};
@@ -2314,6 +2342,13 @@ function runIntroAnimation(){
     };
     return;
   }
+
+  // Android back key / iOS right-swipe: intercept when edit screen is active
+  window.addEventListener('popstate', ()=>{
+    if(document.getElementById('editScreen').classList.contains('active')){
+      goBack();
+    }
+  });
 
   // Handle return from Safari OAuth tab (fallback when window.opener is unavailable)
   window.addEventListener('visibilitychange', ()=>{
