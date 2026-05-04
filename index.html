@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Echo</title>
-<link rel="icon" type="image/svg+xml" href="icon.svg">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect fill='%23E59A2D' width='512' height='512'/><path fill='%23FFFFFF' d='M346.34,212.71h-0.61v-21.3c0-48.01-38.92-86.93-86.93-86.93h-5.59c-48.01,0-86.93,38.92-86.93,86.93v21.3h-0.61c-12.19,0-22.08,9.88-22.08,22.08v150.65c0,12.19,9.88,22.08,22.08,22.08h180.67c12.19,0,22.08-9.88,22.08-22.08V234.79C368.41,222.59,358.53,212.71,346.34,212.71z M218.52,156.73c9.26-9.27,21.58-14.37,34.68-14.37h5.59c13.1,0,25.42,5.1,34.68,14.37c9.26,9.26,14.37,21.58,14.37,34.68v21.3H204.16v-21.3C204.16,178.31,209.26,166,218.52,156.73z M268.22,327.33v31.65c0,6.75-5.47,12.22-12.22,12.22s-12.22-5.47-12.22-12.22v-31.65c-5.39-3.83-8.9-10.11-8.9-17.22c0-11.67,9.46-21.12,21.12-21.12c11.66,0,21.12,9.46,21.12,21.12C277.12,317.22,273.6,323.51,268.22,327.33z'/></svg>">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -964,14 +964,19 @@ input, button, .poppins,
         <span class="mi edit-field-icon">language</span>
         <input class="edit-input" id="fPlatform" type="text" placeholder="例：Gmail、Line、Netflix">
       </div>
+      <label class="edit-field-label">平台網址（選填）</label>
+      <div class="edit-field-wrap">
+        <span class="mi edit-field-icon">language</span>
+        <input class="edit-input" id="fUrl" type="url" placeholder="https://..." autocomplete="url">
+      </div>
+    </div>
+    <div class="form-card">
+      <div class="form-card-title"><span class="mi">lightbulb</span>暗號提示</div>
       <label class="edit-field-label">帳號 / Email</label>
       <div class="edit-field-wrap">
         <span class="mi edit-field-icon">alternate_email</span>
         <input class="edit-input" id="fAccount" type="text" placeholder="登入用的帳號">
       </div>
-    </div>
-    <div class="form-card">
-      <div class="form-card-title"><span class="mi">lightbulb</span>暗號提示</div>
       <label class="edit-field-label">暗號</label>
       <div class="edit-field-wrap">
         <span class="mi edit-field-icon" style="color:var(--hint)">visibility_off</span>
@@ -981,7 +986,7 @@ input, button, .poppins,
         <span class="mi">info</span>
         請填入<span>暗號或記憶提示</span>，切勿填入真實密碼
       </div>
-      <label class="edit-field-label">備註</label>
+      <label class="edit-field-label">備註（選填）</label>
       <div class="edit-field-wrap">
         <span class="mi edit-field-icon" style="top:14px;transform:none">notes</span>
         <textarea class="edit-input edit-textarea" id="fNote" placeholder="其他補充（選填）" rows="2" oninput="autoResize(this)"></textarea>
@@ -1104,7 +1109,7 @@ const DATA_PFX = 'echo_data_';
 const PIN_KEY = 'echo_pin_', USER_KEY = 'echo_current_user', SHEET_ID_KEY = 'echo_sheet_', NICK_KEY = 'echo_nick_', AVATAR_KEY = 'echo_avatar_';
 const SHEET_NAME = 'EchoData';
 const SETTINGS_SHEET = '設定';
-const SHEET_COLS = ['平台','帳號','暗號','備註','分類','建立時間'];
+const SHEET_COLS = ['平台','網址','帳號','暗號','備註','分類','建立時間'];
 
 // ── STATE ──
 let currentUser=null, entries=[], editingId=null, detailId=null;
@@ -1653,20 +1658,31 @@ async function writeSheet(sheetId, token, rows){
   if(!resp.ok) throw new Error('write:'+resp.status);
 }
 
-// Parse sheet rows — handles both old 8-column format (ID first) and new 6-column format
+// Parse sheet rows — handles old 8-col (ID first), previous 6-col, and new 7-col (with 網址)
 function parseSheetRows(allRows){
   if(!allRows || allRows.length < 2) return [];
-  const isOld = allRows[0][0] === 'ID';
+  const h = allRows[0];
+  const isOldId = h[0] === 'ID';   // legacy: ID,平台,帳號,暗號,備註,分類,emoji,建立時間
+  const hasUrl  = h[1] === '網址'; // current: 平台,網址,帳號,暗號,備註,分類,建立時間
   return allRows.slice(1)
-    .filter(r => r[isOld ? 1 : 0])
-    .map(r => isOld ? {
-      id: r[0]||uid(), platform: r[1]||'', account: r[2]||'',
-      hint: r[3]||'', note: r[4]||'', category: r[5]||'其他',
-      emoji: r[6]||'🔑', createdAt: r[7]||new Date().toISOString()
-    } : {
-      id: uid(), platform: r[0]||'', account: r[1]||'',
-      hint: r[2]||'', note: r[3]||'', category: r[4]||'其他',
-      emoji: '🔑', createdAt: r[5]||new Date().toISOString()
+    .filter(r => r[isOldId ? 1 : 0])
+    .map(r => {
+      if(isOldId) return {
+        id: r[0]||uid(), platform: r[1]||'', url: '', account: r[2]||'',
+        hint: r[3]||'', note: r[4]||'', category: r[5]||'其他',
+        emoji: r[6]||'🔑', createdAt: r[7]||new Date().toISOString()
+      };
+      if(hasUrl) return {
+        id: uid(), platform: r[0]||'', url: r[1]||'', account: r[2]||'',
+        hint: r[3]||'', note: r[4]||'', category: r[5]||'其他',
+        emoji: '🔑', createdAt: r[6]||new Date().toISOString()
+      };
+      // Previous 6-col format without 網址
+      return {
+        id: uid(), platform: r[0]||'', url: '', account: r[1]||'',
+        hint: r[2]||'', note: r[3]||'', category: r[4]||'其他',
+        emoji: '🔑', createdAt: r[5]||new Date().toISOString()
+      };
     });
 }
 
@@ -1677,7 +1693,7 @@ async function loadFromSheets(email, providedToken = null){
   // Helper to fetch rows from a known sheet ID
   async function fetchRows(id){
     const resp = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${SHEET_NAME}!A:H`,
+      `https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${SHEET_NAME}!A:I`,
       { headers: { Authorization: `Bearer ${token}` } }
     );
     if(resp.status === 404){ localStorage.removeItem(SHEET_ID_KEY + email); return 'not_found'; }
@@ -1704,7 +1720,7 @@ async function saveToSheets(email, data, providedToken = null){
   const token = providedToken || await ensureToken();
   const { sheetId } = await ensureSheet(token);
   const rows = [SHEET_COLS, ...data.map(e=>[
-    e.platform, e.account, e.hint||'', e.note||'', e.category||'其他', e.createdAt
+    e.platform, e.url||'', e.account, e.hint||'', e.note||'', e.category||'其他', e.createdAt
   ])];
   await writeSheet(sheetId, token, rows);
 }
@@ -1828,7 +1844,7 @@ async function doSync(){
     // Sheet was just created — push local data directly (skip ensureSheet round-trip inside saveToSheets)
     console.log('[Echo] doSync: new sheet — uploading', entries.length, 'entries (local → Sheets)');
     const uploadRows = [SHEET_COLS, ...entries.map(e=>[
-      e.platform, e.account, e.hint||'', e.note||'', e.category||'其他', e.createdAt
+      e.platform, e.url||'', e.account, e.hint||'', e.note||'', e.category||'其他', e.createdAt
     ])];
     await writeSheet(sheetId, token, uploadRows);
     console.log('[Echo] doSync: upload complete');
@@ -1973,6 +1989,10 @@ function openDetail(id){
       <div class="detail-block-label"><span class="mi">alternate_email</span>帳號 / EMAIL</div>
       <div class="detail-block-value">${esc(e.account)}</div>
     </div>
+    ${e.url?`<div class="detail-block">
+      <div class="detail-block-label"><span class="mi">language</span>網址</div>
+      <div class="detail-block-value"><a href="${esc(e.url)}" target="_blank" rel="noopener noreferrer" style="color:var(--primary-dark);word-break:break-all;text-decoration:none">${esc(e.url)}</a></div>
+    </div>`:''}
     ${e.hint?`<div class="detail-hint-block">
       <div class="detail-block-label" style="color:var(--hint)"><span class="mi">visibility_off</span>暗號提示</div>
       <div class="detail-hint-value">${esc(e.hint)}</div>
@@ -2017,6 +2037,7 @@ function openEdit(id){
     document.getElementById('editTitle').textContent='編輯紀錄';
     document.getElementById('deleteBtn').style.display='';
     document.getElementById('fPlatform').value=e.platform;
+    document.getElementById('fUrl').value=e.url||'';
     document.getElementById('fAccount').value=e.account;
     document.getElementById('fHint').value=e.hint||'';
     document.getElementById('fNote').value=e.note||'';
@@ -2025,7 +2046,7 @@ function openEdit(id){
   }else{
     document.getElementById('editTitle').textContent='新增紀錄';
     document.getElementById('deleteBtn').style.display='none';
-    ['fPlatform','fAccount','fHint','fNote'].forEach(id=>document.getElementById(id).value='');
+    ['fPlatform','fUrl','fAccount','fHint','fNote'].forEach(id=>document.getElementById(id).value='');
     selectedCat='其他'; selectedEmoji='🔑';
   }
   buildEmojiGrid(); buildCatSelect(); showScreen('editScreen');
@@ -2033,15 +2054,16 @@ function openEdit(id){
 
 function saveEntry(){
   const platform=document.getElementById('fPlatform').value.trim();
+  const url=document.getElementById('fUrl').value.trim();
   const account=document.getElementById('fAccount').value.trim();
   const hint=document.getElementById('fHint').value.trim();
   const note=document.getElementById('fNote').value.trim();
   if(!platform||!account){alert('請填寫平台名稱和帳號');return;}
   if(editingId){
     const idx=entries.findIndex(e=>e.id===editingId);
-    entries[idx]={...entries[idx],platform,account,hint,note,category:selectedCat,emoji:selectedEmoji};
+    entries[idx]={...entries[idx],platform,url,account,hint,note,category:selectedCat,emoji:selectedEmoji};
   }else{
-    entries.unshift({id:uid(),platform,account,hint,note,category:selectedCat,emoji:selectedEmoji,createdAt:new Date().toISOString()});
+    entries.unshift({id:uid(),platform,url,account,hint,note,category:selectedCat,emoji:selectedEmoji,createdAt:new Date().toISOString()});
   }
   saveUserData(currentUser,entries); goBack();
   syncToSheetsBackground();
