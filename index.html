@@ -314,7 +314,7 @@ input, button, .poppins,
   width: 100%; max-width: 430px; background: var(--white);
   border-top: 1px solid var(--border); display: flex; align-items: center;
   padding: 10px 8px calc(10px + env(safe-area-inset-bottom));
-  box-shadow: 0 -4px 20px rgba(0,0,0,0.05); z-index: 20;
+  box-shadow: 0 -4px 20px rgba(0,0,0,0.05); z-index: 15;
 }
 .nav-item {
   flex: 1; display: flex; flex-direction: column; align-items: center;
@@ -811,6 +811,34 @@ input, button, .poppins,
   font-family:'Poppins',sans-serif; min-width:20px; text-align:center;
   display:inline-block; margin-left:8px; vertical-align:middle;
 }
+
+/* ════ TAB CLIPS v1.2.2 ════ */
+#mainClip, #profileClip {
+  position: fixed; top: 0; left: 50%;
+  width: 100%; max-width: 430px; height: 100%;
+  overflow: hidden; z-index: 10;
+  transition: transform 0.3s cubic-bezier(.4,0,.2,1);
+}
+#mainClip    { transform: translateX(-50%); }
+#profileClip { transform: translateX(calc(-50% + 100vw)); }
+
+#mainScreen, #profileScreen {
+  display: flex !important; position: absolute; inset: 0;
+  min-height: unset; overflow-y: auto; overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+#editScreen, #detailScreen, #trashScreen {
+  position: fixed; top: 0; left: 50%; transform: translateX(-50%);
+  width: 100%; max-width: 430px; height: 100%;
+  z-index: 20; overflow-y: auto; overflow-x: hidden;
+  display: none; flex-direction: column;
+}
+#editScreen.active, #detailScreen.active, #trashScreen.active { display: flex; }
+#welcomeScreen, #setPinScreen, #confirmPinScreen,
+#enterPinScreen, #forgotPinScreen {
+  position: fixed; top: 0; left: 50%; transform: translateX(-50%);
+  width: 100%; max-width: 430px; height: 100%; z-index: 30;
+}
 </style>
 </head>
 <body>
@@ -960,7 +988,8 @@ input, button, .poppins,
   </div>
 </div>
 
-<!-- ════ MAIN ════ -->
+<!-- ════ MAIN CLIP ════ -->
+<div id="mainClip">
 <div id="mainScreen" class="screen">
   <div class="main-header">
     <div class="header-name" id="greetingName">使用者</div>
@@ -992,6 +1021,7 @@ input, button, .poppins,
     </button>
   </div>
 </div>
+</div><!-- #mainClip -->
 
 <!-- ════ EDIT ════ -->
 <div id="editScreen" class="screen">
@@ -1070,10 +1100,11 @@ input, button, .poppins,
   </div>
 </div>
 
-<!-- ════ PROFILE ════ -->
+<!-- ════ PROFILE CLIP ════ -->
+<div id="profileClip">
 <div id="profileScreen" class="screen">
   <div class="nav-bar">
-    <button class="back-btn" onclick="switchNav('home')"><span class="mi">arrow_back</span></button>
+    <button class="back-btn" onclick="setTab(0)"><span class="mi">arrow_back</span></button>
     <div class="nav-title">帳號設定</div>
   </div>
   <div class="profile-body">
@@ -1130,14 +1161,15 @@ input, button, .poppins,
         <div class="profile-row-arrow"><span class="mi">chevron_right</span></div>
       </div>
     </div>
-    <div class="profile-version">Echo v1.2.1 build 20260505</div>
+    <div class="profile-version">Echo v1.2.2 build 20260505</div>
   </div>
 </div>
+</div><!-- #profileClip -->
 
 <!-- ════ TRASH ════ -->
 <div id="trashScreen" class="screen">
   <div class="nav-bar">
-    <button class="back-btn" onclick="switchNav('profile')"><span class="mi">arrow_back</span></button>
+    <button class="back-btn" onclick="navigateBack()"><span class="mi">arrow_back</span></button>
     <div class="nav-title">回收桶</div>
     <button class="delete-btn" id="clearTrashBtn" onclick="clearTrashAll()" style="display:none">
       <span class="mi">delete_sweep</span>清空
@@ -1201,7 +1233,7 @@ const SHEET_COLS = ['平台','網址','帳號','暗號','備註','分類','emoji
 let currentUser=null, entries=[], editingId=null, detailId=null;
 let selectedCat='其他', selectedEmoji='🔑', activeCatFilter='全部';
 let currentPage=1, filteredCache=[];
-let navPage=0; // 0 = mainScreen, 1 = profileScreen
+let currentTab=0, pageStack=[];
 let currentPin='', setPinFirst='', pendingUser=null, forgotPinMode=false;
 let googleTokenClient=null, accessToken=null, tokenExpiry=0;
 let undoDeleteId=null, undoDeleteTimer=null;
@@ -1216,11 +1248,70 @@ const entryToRow = e => [e.platform, e.url||'', e.account, e.hint||'', e.note||'
 
 // ── UI HELPERS ──
 function showScreen(id){
-  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  if(id === 'mainScreen'){ setTab(0); return; }
+  if(id === 'profileScreen'){ _refreshProfileContent(); setTab(1); return; }
+  // Auth screens: toggle .active (they are position:fixed z-index:30, cover clips)
+  document.querySelectorAll('.screen').forEach(s => {
+    if(s.id !== 'mainScreen' && s.id !== 'profileScreen') s.classList.remove('active');
+  });
   document.getElementById(id).classList.add('active');
-  window.scrollTo(0,0);
-  const nav = document.getElementById('globalBottomNav');
-  if(nav) nav.style.display = (id === 'mainScreen' || id === 'profileScreen') ? 'flex' : 'none';
+  document.getElementById('globalBottomNav').style.display = 'none';
+}
+
+function setTab(tab){
+  currentTab = tab;
+  const mainClip    = document.getElementById('mainClip');
+  const profileClip = document.getElementById('profileClip');
+  if(tab === 0){
+    mainClip.style.transform    = 'translateX(-50%)';
+    profileClip.style.transform = 'translateX(calc(-50% + 100vw))';
+    document.getElementById('navHome').classList.add('active');
+    document.getElementById('navProfile').classList.remove('active');
+  } else {
+    _refreshProfileContent();
+    mainClip.style.transform    = 'translateX(calc(-50% - 100vw))';
+    profileClip.style.transform = 'translateX(-50%)';
+    document.getElementById('navHome').classList.remove('active');
+    document.getElementById('navProfile').classList.add('active');
+  }
+  document.getElementById('globalBottomNav').style.display = 'flex';
+}
+
+function _refreshProfileContent(){
+  applyAvatars(currentUser);
+  document.getElementById('profileUsername').textContent = currentUser || '使用者';
+  resetNickDisplay();
+  const sheetId = currentUser ? localStorage.getItem(SHEET_ID_KEY + currentUser) : null;
+  document.getElementById('profileMeta').textContent = sheetId ? '已連結 Google Sheets' : '尚未同步至雲端';
+  const sheetLinkRow = document.getElementById('sheetLinkRow');
+  if(sheetId){
+    sheetLinkRow.style.display = '';
+    sheetLinkRow.onclick = () => window.open('https://docs.google.com/spreadsheets/d/' + sheetId, '_blank', 'noopener');
+  } else {
+    sheetLinkRow.style.display = 'none';
+    sheetLinkRow.onclick = null;
+  }
+  updateTrashBadge();
+}
+
+function pushPage(screenId){
+  if(pageStack.length > 0){
+    document.getElementById(pageStack[pageStack.length - 1]).classList.remove('active');
+  }
+  pageStack.push(screenId);
+  document.getElementById(screenId).classList.add('active');
+  document.getElementById('globalBottomNav').style.display = 'none';
+}
+
+function navigateBack(){
+  if(pageStack.length === 0) return;
+  const current = pageStack.pop();
+  document.getElementById(current).classList.remove('active');
+  if(pageStack.length > 0){
+    document.getElementById(pageStack[pageStack.length - 1]).classList.add('active');
+  } else {
+    document.getElementById('globalBottomNav').style.display = 'flex';
+  }
 }
 
 function showToast(msg, type=''){
@@ -1240,92 +1331,26 @@ function showSyncOverlay(show, label='正在同步資料…'){
   if(label) document.getElementById('syncLabel').textContent = label;
 }
 
-function goBack(){
-  if(document.getElementById('editScreen').classList.contains('active') && editingId){
-    showScreen('detailScreen');
-  } else {
-    switchNav('home');
-  }
-}
+function goBack(){ navigateBack(); }
 
-function applyScreenAnim(id, cls){
-  const el = document.getElementById(id);
-  el.classList.add(cls);
-  el.addEventListener('animationend', () => el.classList.remove(cls), { once: true });
-}
-
-function switchNav(tab, anim){
-  // Layout: [Home(0)] [Profile(1)]
-  // home→profile: profile enters from right (echo-slide-right)
-  // profile→home: home enters from left    (echo-slide-left)
-  const fromProfile = document.getElementById('profileScreen').classList.contains('active');
-  const fromHome    = document.getElementById('mainScreen').classList.contains('active');
-  if(tab==='home'){
-    navPage = 0;
-    showScreen('mainScreen'); renderList();
-    const cls = anim !== undefined ? anim : (fromProfile ? 'echo-slide-left' : null);
-    if(cls) applyScreenAnim('mainScreen', cls);
-    document.getElementById('navHome').classList.add('active');
-    document.getElementById('navProfile').classList.remove('active');
-  } else {
-    navPage = 1;
-    showProfile();
-    const cls = anim !== undefined ? anim : (fromHome ? 'echo-slide-right' : null);
-    if(cls) applyScreenAnim('profileScreen', cls);
-    document.getElementById('navHome').classList.remove('active');
-    document.getElementById('navProfile').classList.add('active');
-  }
+function switchNav(tab){
+  if(tab === 'home'){ renderList(); setTab(0); }
+  else setTab(1);
 }
 
 function initSwipeNav(){
-  let startX = 0, startY = 0, startTime = 0, swipeLocked = false;
-
+  let startX = 0;
   document.addEventListener('touchstart', e => {
     startX = e.touches[0].clientX;
-    startY = e.touches[0].clientY;
-    startTime = Date.now();
   }, { passive: true });
-
   document.addEventListener('touchend', e => {
-    if(swipeLocked) return;
-
     const dx = e.changedTouches[0].clientX - startX;
-    const dy = e.changedTouches[0].clientY - startY;
-    const velocity = Math.abs(dx) / Math.max(Date.now() - startTime, 1);
-
-    if(Math.abs(dy) > Math.abs(dx) * 1.5) return;    // too vertical → ignore
-    if(Math.abs(dx) < 30 && velocity <= 0.3) return;  // too small & slow → ignore
-
-    const onDetail = document.getElementById('detailScreen').classList.contains('active');
-    const onEdit   = document.getElementById('editScreen').classList.contains('active');
-    const onTrash  = document.getElementById('trashScreen').classList.contains('active');
-
-    if(onDetail || onEdit || onTrash){
-      // Inner screens: only right swipe goes back
-      if(dx > 0){
-        swipeLocked = true;
-        if(onDetail) switchNav('home');
-        else if(onEdit){ if(editingId) showScreen('detailScreen'); else switchNav('home'); }
-        // trash: no swipe back (use back button)
-        setTimeout(() => { swipeLocked = false; }, 400);
-      }
+    if(pageStack.length > 0){
+      if(dx > 30) navigateBack();
       return;
     }
-
-    // Tab navigation — navPage is the single source of truth, never check DOM here
-    // navPage 0 = mainScreen, 1 = profileScreen
-    if(navPage === 0 && dx < 0){
-      // Only allow left swipe on home → go to profile
-      swipeLocked = true;
-      switchNav('profile');
-      setTimeout(() => { swipeLocked = false; }, 400);
-    } else if(navPage === 1 && dx > 0){
-      // Only allow right swipe on profile → go to home
-      swipeLocked = true;
-      switchNav('home');
-      setTimeout(() => { swipeLocked = false; }, 400);
-    }
-    // All other combinations are at boundary — silently ignore
+    if(currentTab === 0 && dx < -30) setTab(1);
+    else if(currentTab === 1 && dx > 30){ renderList(); setTab(0); }
   }, { passive: true });
 }
 
@@ -1381,22 +1406,8 @@ function finishNickEdit(val){
 }
 
 function showProfile(){
-  applyAvatars(currentUser);
-  document.getElementById('profileUsername').textContent = currentUser || '使用者';
-  resetNickDisplay();
-  const sheetId = currentUser ? localStorage.getItem(SHEET_ID_KEY + currentUser) : null;
-  document.getElementById('profileMeta').textContent = sheetId ? '已連結 Google Sheets' : '尚未同步至雲端';
-  const sheetLinkRow = document.getElementById('sheetLinkRow');
-  if(sheetId){
-    sheetLinkRow.style.display = '';
-    sheetLinkRow.onclick = () => window.open('https://docs.google.com/spreadsheets/d/' + sheetId, '_blank', 'noopener');
-  } else {
-    sheetLinkRow.style.display = 'none';
-    sheetLinkRow.onclick = null;
-  }
-  updateTrashBadge();
-  showScreen('profileScreen');
-  history.pushState({echo:'profile'}, '');
+  _refreshProfileContent();
+  setTab(1);
 }
 
 function editNickname(){
@@ -1441,14 +1452,14 @@ function importData(){
 }
 
 function scrollToTop(){
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  document.getElementById('mainScreen').scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function initScrollTop(){
-  window.addEventListener('scroll', () => {
+  document.getElementById('mainScreen').addEventListener('scroll', () => {
     const btn = document.getElementById('scrollTopBtn');
     if(!btn) return;
-    btn.classList.toggle('visible', window.scrollY > 300);
+    btn.classList.toggle('visible', document.getElementById('mainScreen').scrollTop > 300);
   }, { passive: true });
 }
 
@@ -1737,6 +1748,7 @@ function doLogout(){
   clearPersistedToken();
   localStorage.removeItem(USER_KEY);
   currentUser=null; entries=[]; activeCatFilter='全部'; currentPage=1;
+  currentTab=0; pageStack=[];
   document.getElementById('searchInput').value='';
   showWelcomeFinal();
   showScreen('welcomeScreen');
@@ -2374,7 +2386,8 @@ function goPage(p){
   const totalPages=Math.ceil(filteredCache.length/PER_PAGE);
   if(p<1||p>totalPages)return;
   currentPage=p; renderList();
-  document.getElementById('listArea').scrollIntoView({behavior:'smooth',block:'start'});
+  const listArea=document.getElementById('listArea');
+  document.getElementById('mainScreen').scrollTo({top:listArea.offsetTop, behavior:'smooth'});
 }
 
 // ── DETAIL ──
@@ -2413,8 +2426,7 @@ function openDetail(id){
       <div class="detail-block-label"><span class="mi">schedule</span>建立時間</div>
       <div class="detail-block-value" style="font-size:13px;color:var(--ink3)">${new Date(e.createdAt).toLocaleString('zh-TW')}</div>
     </div>`;
-  showScreen('detailScreen');
-  history.pushState({echo:'detail'}, '');
+  pushPage('detailScreen');
 }
 
 function openEditFromDetail(){ openEdit(detailId); }
@@ -2425,7 +2437,9 @@ function deleteFromDetail(){
   entry.deleted = true;
   entry.deletedAt = Date.now();
   saveUserData(currentUser,entries); touchLocalModified();
-  switchNav('home');
+  pageStack.forEach(id => document.getElementById(id).classList.remove('active'));
+  pageStack = [];
+  renderList(); setTab(0);
   showUndoToast(detailId, platformName);
   updateTrashBadge();
 }
@@ -2464,14 +2478,8 @@ function openEdit(id){
     ['fPlatform','fUrl','fAccount','fHint','fNote'].forEach(id=>document.getElementById(id).value='');
     selectedCat='其他'; selectedEmoji='🔑';
   }
-  buildEmojiGrid(); buildCatSelect(); showScreen('editScreen');
-  if(id){
-    // came from detail — push 2 states so first back returns to detail, second returns to main
-    history.pushState({echo:'edit-back'}, '');
-    history.pushState({echo:'edit'}, '');
-  } else {
-    history.pushState({echo:'edit'}, '');
-  }
+  buildEmojiGrid(); buildCatSelect();
+  pushPage('editScreen');
 }
 
 function saveEntry(){
@@ -2491,7 +2499,10 @@ function saveEntry(){
   }else{
     entries.unshift({id:uid(),platform,url,account,hint,note,category:selectedCat,emoji:selectedEmoji,createdAt:new Date().toISOString()});
   }
-  saveUserData(currentUser,entries); touchLocalModified(); switchNav('home');
+  saveUserData(currentUser,entries); touchLocalModified();
+  pageStack.forEach(id => document.getElementById(id).classList.remove('active'));
+  pageStack = [];
+  renderList(); setTab(0);
   syncToSheetsBackground();
 }
 
@@ -2552,8 +2563,7 @@ function purgeOldTrash(){
 
 function openTrash(){
   renderTrash();
-  showScreen('trashScreen');
-  history.pushState({echo:'trash'}, '');
+  pushPage('trashScreen');
 }
 
 function renderTrash(){
@@ -2632,7 +2642,9 @@ function deleteEntry(){
   entry.deleted = true;
   entry.deletedAt = Date.now();
   saveUserData(currentUser,entries); touchLocalModified();
-  switchNav('home');
+  pageStack.forEach(id => document.getElementById(id).classList.remove('active'));
+  pageStack = [];
+  renderList(); setTab(0);
   showUndoToast(editingId, platformName);
   updateTrashBadge();
 }
@@ -2649,8 +2661,10 @@ function loginSuccess(user){
   document.getElementById('greetingName').textContent = 'Hi, ' + nick;
   applyAvatars(user);
   activeCatFilter='全部'; currentPage=1;
+  pageStack=[]; currentTab=0;
   buildCatFilter(); renderList();
-  showScreen('mainScreen');
+  setTab(0);
+  history.pushState({echo:'app'}, '');
 
   // Restore persisted token from localStorage if in-memory token is missing (e.g. app restart)
   if(!getTokenIfValid()) restorePersistedToken();
@@ -2852,18 +2866,11 @@ function runIntroAnimation(){
 
   initSwipeNav();
 
-  // Android back key / iOS right-swipe: intercept for edit / detail / profile / trash screens
+  // Android back key: use pageStack for inner screens; ignore at tab level
   window.addEventListener('popstate', ()=>{
-    if(document.getElementById('editScreen').classList.contains('active')){
-      // if editing an existing entry, first back goes to detail; otherwise goes home
-      if(editingId){ showScreen('detailScreen'); }
-      else { switchNav('home'); }
-    } else if(document.getElementById('detailScreen').classList.contains('active')){
-      switchNav('home');
-    } else if(document.getElementById('trashScreen').classList.contains('active')){
-      switchNav('profile');
-    } else if(document.getElementById('profileScreen').classList.contains('active')){
-      switchNav('home');
+    if(pageStack.length > 0){
+      navigateBack();
+      history.pushState({echo:'app'}, '');
     }
   });
 
