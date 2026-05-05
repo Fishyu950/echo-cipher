@@ -1130,7 +1130,7 @@ input, button, .poppins,
         <div class="profile-row-arrow"><span class="mi">chevron_right</span></div>
       </div>
     </div>
-    <div class="profile-version">Echo v1.2.0 build 20260505</div>
+    <div class="profile-version">Echo v1.2.1 build 20260505</div>
   </div>
 </div>
 
@@ -1278,7 +1278,7 @@ function switchNav(tab, anim){
 }
 
 function initSwipeNav(){
-  let startX = 0, startY = 0, startTime = 0;
+  let startX = 0, startY = 0, startTime = 0, swipeLocked = false;
 
   document.addEventListener('touchstart', e => {
     startX = e.touches[0].clientX;
@@ -1287,29 +1287,45 @@ function initSwipeNav(){
   }, { passive: true });
 
   document.addEventListener('touchend', e => {
+    if(swipeLocked) return;
+
     const dx = e.changedTouches[0].clientX - startX;
     const dy = e.changedTouches[0].clientY - startY;
     const velocity = Math.abs(dx) / Math.max(Date.now() - startTime, 1);
 
-    if(Math.abs(dy) > Math.abs(dx) * 1.5) return;        // too vertical → ignore
-    if(Math.abs(dx) < 30 && velocity <= 0.3) return;     // too small & slow → ignore
+    if(Math.abs(dy) > Math.abs(dx) * 1.5) return;    // too vertical → ignore
+    if(Math.abs(dx) < 30 && velocity <= 0.3) return;  // too small & slow → ignore
 
-    const onMain    = document.getElementById('mainScreen').classList.contains('active');
-    const onProfile = document.getElementById('profileScreen').classList.contains('active');
-    const onDetail  = document.getElementById('detailScreen').classList.contains('active');
-    const onEdit    = document.getElementById('editScreen').classList.contains('active');
+    const onDetail = document.getElementById('detailScreen').classList.contains('active');
+    const onEdit   = document.getElementById('editScreen').classList.contains('active');
+    const onTrash  = document.getElementById('trashScreen').classList.contains('active');
 
-    if(onMain || onProfile){
-      // Tab navigation: navPage 0=home, 1=profile
-      // wrong direction → boundary, do nothing
-      if     (navPage === 0 && dx < 0) switchNav('profile');
-      else if(navPage === 1 && dx > 0) switchNav('home');
-    } else if(onDetail && dx > 0){
-      switchNav('home');
-    } else if(onEdit && dx > 0){
-      if(editingId) showScreen('detailScreen');
-      else switchNav('home');
+    if(onDetail || onEdit || onTrash){
+      // Inner screens: only right swipe goes back
+      if(dx > 0){
+        swipeLocked = true;
+        if(onDetail) switchNav('home');
+        else if(onEdit){ if(editingId) showScreen('detailScreen'); else switchNav('home'); }
+        // trash: no swipe back (use back button)
+        setTimeout(() => { swipeLocked = false; }, 400);
+      }
+      return;
     }
+
+    // Tab navigation — navPage is the single source of truth, never check DOM here
+    // navPage 0 = mainScreen, 1 = profileScreen
+    if(navPage === 0 && dx < 0){
+      // Only allow left swipe on home → go to profile
+      swipeLocked = true;
+      switchNav('profile');
+      setTimeout(() => { swipeLocked = false; }, 400);
+    } else if(navPage === 1 && dx > 0){
+      // Only allow right swipe on profile → go to home
+      swipeLocked = true;
+      switchNav('home');
+      setTimeout(() => { swipeLocked = false; }, 400);
+    }
+    // All other combinations are at boundary — silently ignore
   }, { passive: true });
 }
 
