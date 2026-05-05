@@ -2662,6 +2662,9 @@ function loginSuccess(user){
   applyAvatars(user);
   activeCatFilter='全部'; currentPage=1;
   pageStack=[]; currentTab=0;
+  document.querySelectorAll('.screen').forEach(s => {
+    if(s.id !== 'mainScreen' && s.id !== 'profileScreen') s.classList.remove('active');
+  });
   buildCatFilter(); renderList();
   setTab(0);
   history.pushState({echo:'app'}, '');
