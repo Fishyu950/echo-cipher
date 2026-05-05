@@ -13,7 +13,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
-<link href="https://fonts.googleapis.com/css2?family=Fugaz+One&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Iceberg&display=swap" rel="stylesheet">
 <script src="https://accounts.google.com/gsi/client" async></script>
 <style>
 :root {
@@ -384,7 +384,7 @@ input, button, .poppins,
   font-family: 'Poppins', 'Noto Sans TC', sans-serif;
 }
 
-.edit-body { padding: 20px 16px 120px; }
+.edit-body { padding: 20px 16px 20px; flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 
 .form-card {
   background: var(--white); border-radius: var(--radius-lg);
@@ -453,9 +453,9 @@ input, button, .poppins,
 .cat-edit-chip.selected { background: var(--primary-bg); border-color: var(--primary); color: var(--primary-dark); }
 
 .save-bar {
-  position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
-  width: 100%; max-width: 430px; padding: 16px;
-  background: var(--white); border-top: 1px solid var(--border); z-index: 10;
+  flex-shrink: 0;
+  padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+  background: var(--white); border-top: 1px solid var(--border);
 }
 .btn-save {
   width: 100%; padding: 15px; background: var(--primary); border: none;
@@ -681,7 +681,7 @@ input, button, .poppins,
   text-align:center; z-index:8; pointer-events:none;
   white-space:nowrap; will-change:transform,opacity;
 }
-.intro-wm { font-family:'Fugaz One',sans-serif; font-size:36px; color:var(--ink); letter-spacing:0.05em; }
+.intro-wm { font-family:'Iceberg',cursive; font-size:36px; color:var(--ink); letter-spacing:0.05em; }
 .intro-tag { font-family:'Poppins',sans-serif; font-size:13px; font-style:italic; font-weight:300; color:var(--ink3); margin-top:12px; letter-spacing:.07em; }
 /* login (stage 6) */
 #introLogin {
@@ -834,6 +834,7 @@ input, button, .poppins,
   display: none; flex-direction: column;
 }
 #editScreen.active, #detailScreen.active, #trashScreen.active { display: flex; }
+#editScreen { overflow-y: hidden; } /* edit-body handles its own scroll */
 #welcomeScreen, #setPinScreen, #confirmPinScreen,
 #enterPinScreen, #forgotPinScreen {
   position: fixed; top: 0; left: 50%; transform: translateX(-50%);
@@ -2499,6 +2500,7 @@ function openEdit(id){
   }
   buildEmojiGrid(); buildCatSelect();
   pushPage('editScreen');
+  document.getElementById('editScreen').querySelector('.edit-body').scrollTop = 0;
 }
 
 function saveEntry(){
@@ -2841,7 +2843,7 @@ function runIntroAnimation(){
         <div style="width:72px;height:72px;border-radius:50%;background:var(--primary);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;box-shadow:0 8px 24px rgba(245,166,35,0.4)">
           <span class="mi" style="font-size:34px;color:white">lock</span>
         </div>
-        <div style="font-family:'Fugaz One',sans-serif;font-size:28px;color:var(--ink);letter-spacing:0.05em;margin-bottom:6px">Echo</div>
+        <div style="font-family:'Iceberg',cursive;font-size:28px;color:var(--ink);letter-spacing:0.05em;margin-bottom:6px">Echo</div>
         <div style="font-family:'Noto Sans TC',sans-serif;font-size:13px;color:var(--ink3);margin-bottom:36px">連結你的 Google 帳號</div>
         <button id="oauthBtn" onclick="startOAuthInHelper()" style="width:100%;max-width:280px;padding:16px;background:var(--primary);border:none;border-radius:var(--radius-md);font-family:'Poppins',sans-serif;font-size:15px;font-weight:700;color:white;cursor:pointer;box-shadow:0 4px 16px rgba(245,166,35,0.35)">使用 Google 帳號連結</button>
       </div>`);
