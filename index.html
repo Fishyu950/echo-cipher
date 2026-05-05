@@ -763,6 +763,54 @@ input, button, .poppins,
 .sync-hint .mi { font-size:20px; color:var(--primary); }
 .sync-hint-text { flex:1; }
 @keyframes spin { to { transform:rotate(360deg); } }
+
+/* ════ UNDO DELETE BAR ════ */
+.undo-delete-bar {
+  position:fixed; bottom:80px; left:50%; transform:translateX(-50%);
+  width:calc(100% - 32px); max-width:398px;
+  display:flex; align-items:center; gap:10px;
+  background:#FFF9E6; border-radius:999px;
+  border:1px solid #f0d090; color:var(--primary-dark);
+  padding:14px 16px; box-shadow:0 4px 16px rgba(245,166,35,0.18);
+  z-index:150; opacity:0; pointer-events:none; transition:opacity 0.25s;
+}
+.undo-delete-bar.show { opacity:1; pointer-events:auto; }
+.undo-delete-bar .mi { font-size:20px; color:var(--primary); flex-shrink:0; }
+.undo-delete-bar-text { flex:1; font-family:'Poppins','Noto Sans TC',sans-serif; font-size:13px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.undo-delete-btn { background:none; border:none; font-family:'Poppins','Noto Sans TC',sans-serif; font-size:13px; font-weight:700; color:var(--primary-dark); cursor:pointer; text-decoration:underline; text-underline-offset:3px; padding:0; white-space:nowrap; }
+
+/* ════ TRASH SCREEN ════ */
+#trashScreen { background:var(--bg); }
+.trash-entry-card {
+  background:var(--white); border-radius:var(--radius-lg); padding:16px;
+  margin-bottom:12px; box-shadow:var(--shadow-sm); border:1.5px solid transparent;
+  animation: fadeUp 0.3s cubic-bezier(.16,1,.3,1) both;
+}
+.trash-entry-top { display:flex; align-items:center; gap:12px; margin-bottom:12px; }
+.trash-entry-info { flex:1; min-width:0; }
+.trash-entry-platform { font-size:15px; font-weight:600; color:var(--ink); font-family:'Poppins','Noto Sans TC',sans-serif; }
+.trash-entry-time { font-size:12px; color:var(--ink3); margin-top:3px; font-family:'Poppins',sans-serif; }
+.trash-entry-actions { display:flex; gap:8px; }
+.trash-restore-btn {
+  flex:1; padding:10px; background:var(--primary-bg); border:1.5px solid var(--primary);
+  border-radius:var(--radius-md); font-family:'Poppins','Noto Sans TC',sans-serif;
+  font-size:13px; font-weight:600; color:var(--primary-dark); cursor:pointer;
+  display:flex; align-items:center; justify-content:center; gap:6px; transition:all 0.15s;
+}
+.trash-restore-btn:active { filter:brightness(0.95); }
+.trash-perm-btn {
+  padding:10px 14px; background:#f5eaea; border:1.5px solid #e8c8c8;
+  border-radius:var(--radius-md); font-family:'Poppins','Noto Sans TC',sans-serif;
+  font-size:13px; font-weight:600; color:#b85a5a; cursor:pointer;
+  display:flex; align-items:center; justify-content:center; gap:6px; transition:all 0.15s;
+}
+.trash-perm-btn:active { filter:brightness(0.95); }
+.trash-badge {
+  background:var(--primary); color:white; border-radius:50px;
+  font-size:11px; font-weight:700; padding:2px 8px;
+  font-family:'Poppins',sans-serif; min-width:20px; text-align:center;
+  display:inline-block; margin-left:8px; vertical-align:middle;
+}
 </style>
 </head>
 <body>
@@ -1071,14 +1119,31 @@ input, button, .poppins,
         <div class="profile-row-label">開啟試算表（確認檔案與資料）</div>
         <div class="profile-row-arrow"><span class="mi">open_in_new</span></div>
       </div>
+      <div class="profile-row" onclick="openTrash()">
+        <div class="profile-row-icon"><span class="mi">delete</span></div>
+        <div class="profile-row-label">回收桶<span id="trashBadge" class="trash-badge" style="display:none">0</span></div>
+        <div class="profile-row-arrow"><span class="mi">chevron_right</span></div>
+      </div>
       <div class="profile-row logout-row" onclick="doLogout()">
         <div class="profile-row-icon"><span class="mi">logout</span></div>
         <div class="profile-row-label">登出</div>
         <div class="profile-row-arrow"><span class="mi">chevron_right</span></div>
       </div>
     </div>
-    <div class="profile-version">Echo v1.1.8 build 20260505</div>
+    <div class="profile-version">Echo v1.2.0 build 20260505</div>
   </div>
+</div>
+
+<!-- ════ TRASH ════ -->
+<div id="trashScreen" class="screen">
+  <div class="nav-bar">
+    <button class="back-btn" onclick="switchNav('profile')"><span class="mi">arrow_back</span></button>
+    <div class="nav-title">回收桶</div>
+    <button class="delete-btn" id="clearTrashBtn" onclick="clearTrashAll()" style="display:none">
+      <span class="mi">delete_sweep</span>清空
+    </button>
+  </div>
+  <div class="edit-body" id="trashBody"></div>
 </div>
 
 <!-- ════ GLOBAL BOTTOM NAV ════ -->
@@ -1101,6 +1166,11 @@ input, button, .poppins,
   </div>
 </div>
 <div id="toast" class="toast"></div>
+<div id="undoDeleteBar" class="undo-delete-bar">
+  <span class="mi">delete</span>
+  <span class="undo-delete-bar-text" id="undoDeleteText"></span>
+  <button class="undo-delete-btn" onclick="undoDelete()">復原</button>
+</div>
 
 <script>
 // ── CONFIG — replace with your Google Cloud OAuth 2.0 Client ID ──
@@ -1125,7 +1195,7 @@ const TOKEN_STORAGE_KEY = 'echo_access_token', TOKEN_EXPIRY_KEY = 'echo_token_ex
 const LAST_MODIFIED_LSKEY = 'echo_last_modified_';
 const SHEET_NAME = 'EchoData';
 const SETTINGS_SHEET = '設定';
-const SHEET_COLS = ['平台','網址','帳號','暗號','備註','分類','emoji','建立時間','_id'];
+const SHEET_COLS = ['平台','網址','帳號','暗號','備註','分類','emoji','建立時間','_id','已刪除'];
 
 // ── STATE ──
 let currentUser=null, entries=[], editingId=null, detailId=null;
@@ -1134,6 +1204,7 @@ let currentPage=1, filteredCache=[];
 let navPage=0; // 0 = mainScreen, 1 = profileScreen
 let currentPin='', setPinFirst='', pendingUser=null, forgotPinMode=false;
 let googleTokenClient=null, accessToken=null, tokenExpiry=0;
+let undoDeleteId=null, undoDeleteTimer=null;
 
 // ── HELPERS ──
 const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -1141,6 +1212,7 @@ const getUserData = u => JSON.parse(localStorage.getItem(DATA_PFX+u)||'[]');
 const saveUserData = (u,d) => localStorage.setItem(DATA_PFX+u, JSON.stringify(d));
 const uid = () => Date.now().toString(36)+Math.random().toString(36).slice(2);
 const getCat = name => CATS.find(c=>c.name===name)||CATS[CATS.length-1];
+const entryToRow = e => [e.platform, e.url||'', e.account, e.hint||'', e.note||'', e.category||'其他', e.emoji||'🔑', e.createdAt, e.id||uid(), e.deleted ? String(e.deletedAt||Date.now()) : ''];
 
 // ── UI HELPERS ──
 function showScreen(id){
@@ -1306,6 +1378,7 @@ function showProfile(){
     sheetLinkRow.style.display = 'none';
     sheetLinkRow.onclick = null;
   }
+  updateTrashBadge();
   showScreen('profileScreen');
   history.pushState({echo:'profile'}, '');
 }
@@ -1748,9 +1821,7 @@ async function ensureSheet(token){
     console.log('[Echo] ensureSheet: [REBUILD] step 2 done — new sheetId =', sheetId);
 
     // 3c. Write backup to new sheet immediately (direction is always localStorage → Sheets, never reversed)
-    const backupRows = [SHEET_COLS, ...localBackup.map(e=>[
-      e.platform, e.url||'', e.account, e.hint||'', e.note||'', e.category||'其他', e.emoji||'🔑', e.createdAt, e.id||uid()
-    ])];
+    const backupRows = [SHEET_COLS, ...localBackup.map(entryToRow)];
     console.log('[Echo] ensureSheet: [REBUILD] step 3 — writing', localBackup.length, 'entries to new sheet...');
     await writeSheet(sheetId, token, backupRows);
     console.log('[Echo] ensureSheet: [REBUILD] step 3 done — sheet now contains', localBackup.length, 'data rows');
@@ -1858,10 +1929,12 @@ function parseSheetRows(allRows){
           emoji: r[6]||'🔑', createdAt: r[7]||new Date().toISOString()
         };
       } else if(hasUrl && hasEmoji){                                         // format 4 ← current
+        const delVal = r[9] || '';
         entry = {
           id: r[8]||uid(), platform: r[0]||'', url: r[1]||'', account: r[2]||'',
           hint: r[3]||'', note: r[4]||'', category: r[5]||'其他',
-          emoji: r[6]||'🔑', createdAt: r[7]||new Date().toISOString()
+          emoji: r[6]||'🔑', createdAt: r[7]||new Date().toISOString(),
+          ...(delVal ? { deleted: true, deletedAt: parseInt(delVal,10)||Date.now() } : {})
         };
       } else if(hasUrl){                                                     // format 3 (legacy)
         entry = {
@@ -1891,7 +1964,7 @@ async function loadFromSheets(email, providedToken = null){
   // Helper to fetch rows from a known sheet ID
   async function fetchRows(id){
     const resp = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${SHEET_NAME}!A:I`,
+      `https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${SHEET_NAME}!A:J`,
       { headers: { Authorization: `Bearer ${token}` } }
     );
     if(resp.status === 404){ localStorage.removeItem(SHEET_ID_KEY + email); return 'not_found'; }
@@ -1917,9 +1990,7 @@ async function loadFromSheets(email, providedToken = null){
 async function saveToSheets(email, data, providedToken = null){
   const token = providedToken || await ensureToken();
   const { sheetId } = await ensureSheet(token);
-  const rows = [SHEET_COLS, ...data.map(e=>[
-    e.platform, e.url||'', e.account, e.hint||'', e.note||'', e.category||'其他', e.emoji||'🔑', e.createdAt, e.id||uid()
-  ])];
+  const rows = [SHEET_COLS, ...data.map(entryToRow)];
   await writeSheet(sheetId, token, rows);
 }
 
@@ -2123,9 +2194,7 @@ async function doSync(){
   if(isNew){
     // Sheet was just created — push local data and settings directly
     console.log('[Echo] doSync: new sheet — uploading', entries.length, 'entries (local → Sheets)');
-    const uploadRows = [SHEET_COLS, ...entries.map(e=>[
-      e.platform, e.url||'', e.account, e.hint||'', e.note||'', e.category||'其他', e.emoji||'🔑', e.createdAt, e.id||uid()
-    ])];
+    const uploadRows = [SHEET_COLS, ...entries.map(entryToRow)];
     await writeSheet(sheetId, token, uploadRows);
     const localTs = getLocalLastModified() || Date.now();
     await saveSettingsToSheets(getNick(), localTs);
@@ -2225,9 +2294,11 @@ function onSearch(){ currentPage=1; renderList(); }
 function renderList(){
   const q = document.getElementById('searchInput').value.toLowerCase();
   filteredCache = entries.filter(e=>
-    e.platform.toLowerCase().includes(q) ||
-    e.account.toLowerCase().includes(q) ||
-    (e.note||'').toLowerCase().includes(q)
+    !e.deleted && (
+      e.platform.toLowerCase().includes(q) ||
+      e.account.toLowerCase().includes(q) ||
+      (e.note||'').toLowerCase().includes(q)
+    )
   );
   if(activeCatFilter!=='全部') filteredCache=filteredCache.filter(e=>(e.category||'其他')===activeCatFilter);
 
@@ -2332,9 +2403,15 @@ function openDetail(id){
 
 function openEditFromDetail(){ openEdit(detailId); }
 function deleteFromDetail(){
-  entries=entries.filter(e=>e.id!==detailId);
-  saveUserData(currentUser,entries); touchLocalModified(); goBack();
-  syncToSheetsBackground();
+  const entry = entries.find(e=>e.id===detailId);
+  if(!entry) return;
+  const platformName = entry.platform;
+  entry.deleted = true;
+  entry.deletedAt = Date.now();
+  saveUserData(currentUser,entries); touchLocalModified();
+  switchNav('home');
+  showUndoToast(detailId, platformName);
+  updateTrashBadge();
 }
 
 // ── EDIT ──
@@ -2407,10 +2484,141 @@ function autoResize(el){
   el.style.height = el.scrollHeight + 'px';
 }
 
-function deleteEntry(){
-  entries=entries.filter(e=>e.id!==editingId);
-  saveUserData(currentUser,entries); touchLocalModified(); switchNav('home');
+// ── SOFT DELETE / UNDO ──
+function showUndoToast(id, platformName){
+  undoDeleteId = id;
+  if(undoDeleteTimer) clearTimeout(undoDeleteTimer);
+  const bar = document.getElementById('undoDeleteBar');
+  document.getElementById('undoDeleteText').textContent = `已刪除「${platformName}」`;
+  bar.classList.add('show');
+  undoDeleteTimer = setTimeout(()=>{
+    bar.classList.remove('show');
+    undoDeleteId = null;
+    undoDeleteTimer = null;
+  }, 5000);
+}
+
+function undoDelete(){
+  if(!undoDeleteId) return;
+  const entry = entries.find(e=>e.id===undoDeleteId);
+  if(entry){
+    delete entry.deleted;
+    delete entry.deletedAt;
+    saveUserData(currentUser, entries); touchLocalModified();
+    renderList();
+    updateTrashBadge();
+    showToast('已復原', 'success');
+  }
+  if(undoDeleteTimer) clearTimeout(undoDeleteTimer);
+  undoDeleteTimer = null; undoDeleteId = null;
+  document.getElementById('undoDeleteBar').classList.remove('show');
+}
+
+// ── TRASH ──
+function updateTrashBadge(){
+  const count = entries.filter(e=>e.deleted).length;
+  const badge = document.getElementById('trashBadge');
+  if(!badge) return;
+  badge.textContent = count;
+  badge.style.display = count > 0 ? '' : 'none';
+}
+
+function purgeOldTrash(){
+  const threshold = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  const before = entries.length;
+  entries = entries.filter(e => !e.deleted || !e.deletedAt || e.deletedAt >= threshold);
+  if(entries.length !== before){
+    saveUserData(currentUser, entries);
+    touchLocalModified();
+    console.log('[Echo] purgeOldTrash: removed', before - entries.length, 'entries');
+  }
+}
+
+function openTrash(){
+  renderTrash();
+  showScreen('trashScreen');
+  history.pushState({echo:'trash'}, '');
+}
+
+function renderTrash(){
+  const deleted = entries.filter(e=>e.deleted);
+  const body = document.getElementById('trashBody');
+  const clearBtn = document.getElementById('clearTrashBtn');
+  if(!deleted.length){
+    clearBtn.style.display = 'none';
+    body.innerHTML = `<div class="empty-state">
+      <div class="empty-icon-wrap"><span class="mi">delete</span></div>
+      <div class="empty-title">回收桶是空的</div>
+      <div class="empty-sub">已刪除的紀錄會暫存在這裡<br>30 天後自動永久清除</div>
+    </div>`;
+    return;
+  }
+  clearBtn.style.display = '';
+  body.innerHTML = deleted.map(e=>{
+    const cat = getCat(e.category||'其他');
+    const t = e.deletedAt ? new Date(e.deletedAt).toLocaleString('zh-TW') : '未知時間';
+    return `<div class="trash-entry-card">
+      <div class="trash-entry-top">
+        <div class="entry-icon" style="background:${cat.bg}">${esc(e.emoji||'🔑')}</div>
+        <div class="trash-entry-info">
+          <div class="trash-entry-platform">${esc(e.platform)}</div>
+          <div class="trash-entry-time">刪除於 ${t}</div>
+        </div>
+      </div>
+      <div class="trash-entry-actions">
+        <button class="trash-restore-btn" onclick="restoreFromTrash('${e.id}')">
+          <span class="mi">restore</span>還原
+        </button>
+        <button class="trash-perm-btn" onclick="permanentDeleteEntry('${e.id}')">
+          <span class="mi">delete_forever</span>永久刪除
+        </button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function restoreFromTrash(id){
+  const entry = entries.find(e=>e.id===id);
+  if(!entry) return;
+  delete entry.deleted;
+  delete entry.deletedAt;
+  saveUserData(currentUser, entries); touchLocalModified();
+  renderTrash();
+  updateTrashBadge();
+  showToast('已還原', 'success');
   syncToSheetsBackground();
+}
+
+function permanentDeleteEntry(id){
+  if(!confirm('確定永久刪除這筆紀錄嗎？此動作無法復原。')) return;
+  entries = entries.filter(e=>e.id!==id);
+  saveUserData(currentUser, entries); touchLocalModified();
+  renderTrash();
+  updateTrashBadge();
+  showToast('已永久刪除', 'success');
+  syncToSheetsBackground();
+}
+
+function clearTrashAll(){
+  if(!confirm('確定清空所有回收桶紀錄嗎？此動作無法復原。')) return;
+  entries = entries.filter(e=>!e.deleted);
+  saveUserData(currentUser, entries); touchLocalModified();
+  renderTrash();
+  updateTrashBadge();
+  showToast('回收桶已清空', 'success');
+  syncToSheetsBackground();
+}
+
+function deleteEntry(){
+  const entry = entries.find(e=>e.id===editingId);
+  if(!entry) return;
+  const platformName = entry.platform;
+  entry.deleted = true;
+  entry.deletedAt = Date.now();
+  saveUserData(currentUser,entries); touchLocalModified();
+  switchNav('home');
+  showUndoToast(editingId, platformName);
+  updateTrashBadge();
 }
 
 // ── LOGIN SUCCESS ──
@@ -2418,6 +2626,8 @@ function loginSuccess(user){
   currentUser=user;
   console.log('[Echo] loginSuccess: user =', user, '| localStorage USER_KEY =', localStorage.getItem(USER_KEY));
   entries=getUserData(user);
+  purgeOldTrash();
+  updateTrashBadge();
   const defaultNick = user.includes('@') ? user.split('@')[0] : user;
   const nick = localStorage.getItem(NICK_KEY + user) || defaultNick;
   document.getElementById('greetingName').textContent = 'Hi, ' + nick;
@@ -2626,7 +2836,7 @@ function runIntroAnimation(){
 
   initSwipeNav();
 
-  // Android back key / iOS right-swipe: intercept for edit / detail / profile screens
+  // Android back key / iOS right-swipe: intercept for edit / detail / profile / trash screens
   window.addEventListener('popstate', ()=>{
     if(document.getElementById('editScreen').classList.contains('active')){
       // if editing an existing entry, first back goes to detail; otherwise goes home
@@ -2634,6 +2844,8 @@ function runIntroAnimation(){
       else { switchNav('home'); }
     } else if(document.getElementById('detailScreen').classList.contains('active')){
       switchNav('home');
+    } else if(document.getElementById('trashScreen').classList.contains('active')){
+      switchNav('profile');
     } else if(document.getElementById('profileScreen').classList.contains('active')){
       switchNav('home');
     }
