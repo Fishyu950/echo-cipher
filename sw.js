@@ -1,5 +1,5 @@
-const CACHE_VERSION = 'echo-v1.2.4';
-const CACHE_FILES = ['./index.html', './apple-touch-icon.png'];
+const CACHE_VERSION = 'echo-v1.2.5';
+const CACHE_FILES = ['./index.html'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE_VERSION).then(cache => cache.addAll(CACHE_FILES)));
