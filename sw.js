@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'echo-v1.2.6';
+const CACHE_VERSION = 'echo-v1.2.7';
 const CACHE_FILES = ['./index.html'];
 
 self.addEventListener('install', e => {
